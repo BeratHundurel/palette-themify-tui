@@ -1,0 +1,104 @@
+{
+  "name": "special",
+  "displayName": "My Local Theme",
+  "description": "A local custom theme for VS Code",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.70.0"
+  },
+  "contributes": {
+    "themes": [
+      {
+        "label": "Sakura Full Moon",
+        "uiTheme": "vs-dark",
+        "path": "./themes/sakura-full-moon.json"
+      },
+      {
+        "label": "Sakura Red Moon",
+        "uiTheme": "vs-dark",
+        "path": "./themes/sakura-red-moon.json"
+      },
+      {
+        "label": "Sakura Night",
+        "uiTheme": "vs-dark",
+        "path": "./themes/sakura-night.json"
+      },
+      {
+        "label": "Midnight Harbor",
+        "uiTheme": "vs-dark",
+        "path": "./themes/midnight-harbor.json"
+      },
+      {
+        "label": "Forest Jade",
+        "uiTheme": "vs-dark",
+        "path": "./themes/forest-jade.json"
+      },
+      {
+        "label": "Forest Mossy",
+        "uiTheme": "vs-dark",
+        "path": "./themes/forest-mossy.json"
+      },
+      {
+        "label": "Forest Watery",
+        "uiTheme": "vs-dark",
+        "path": "./themes/forest-watery.json"
+      },
+      {
+        "label": "Ristretto",
+        "uiTheme": "vs-dark",
+        "path": "./themes/ristretto.json"
+      },
+      {
+        "label": "Ristretto Green",
+        "uiTheme": "vs-dark",
+        "path": "./themes/ristretto-green.json"
+      },
+      {
+        "label": "Ristretto Urban",
+        "uiTheme": "vs-dark",
+        "path": "./themes/ristretto-city.json"
+      },
+      {
+        "label": "Pastelle Pinky",
+        "uiTheme": "vs",
+        "path": "./themes/pastelle.json"
+      },
+      {
+        "label": "Pastelle Earthy",
+        "uiTheme": "vs",
+        "path": "./themes/palette-earthy.json"
+      },
+      {
+        "label": "Celestial",
+        "uiTheme": "vs-dark",
+        "path": "./themes/celestial.json"
+      },
+      {
+        "label": "Old School",
+        "uiTheme": "vs-dark",
+        "path": "./themes/old-school.json"
+      },
+      {
+        "label": "Tide Coral",
+        "uiTheme": "vs-dark",
+        "path": "./themes/tide-coral.json"
+      },
+      {
+        "label": "Tide Dusk",
+        "uiTheme": "vs-dark",
+        "path": "./themes/tide-dusk.json"
+      },
+      {
+        "label": "East",
+        "uiTheme": "vs-dark",
+        "path": "./themes/east.json"
+      },
+      {
+        "label": "Monako",
+        "uiTheme": "vs-dark",
+        "path": "./themes/monako.json"
+      }
+    ]
+  }
+}
