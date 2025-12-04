@@ -1,5 +1,6 @@
 const std = @import("std");
 const palette_themify = @import("palette_themify");
+const color_utils = palette_themify.color_utils;
 const vaxis = @import("vaxis");
 const zigimg = @import("zigimg");
 
@@ -15,12 +16,11 @@ pub const std_options: std.Options = .{
     },
 };
 
-/// Helper struct for counting and grouping similar colors
 const ColorAndCount = struct {
     color: zigimg.color.Colorf32,
     count: usize,
 
-    /// Check if two colors are similar within a threshold
+    /// Two colors are considered similar if all RGB components differ by less than 10%
     fn colorSimilar(a: zigimg.color.Colorf32, b: zigimg.color.Colorf32) bool {
         const threshold = 0.1;
         return @abs(a.r - b.r) < threshold and
@@ -37,14 +37,14 @@ const Event = union(enum) {
     key_press: vaxis.Key,
     key_release: vaxis.Key,
     mouse: vaxis.Mouse,
-    focus_in, // window has gained focus
-    focus_out, // window has lost focus
-    paste_start, // bracketed paste start
-    paste_end, // bracketed paste end
-    paste: []const u8, // osc 52 paste, caller must free
-    color_report: vaxis.Color.Report, // osc 4, 10, 11, 12 response
-    color_scheme: vaxis.Color.Scheme, // light / dark OS theme changes
-    winsize: vaxis.Winsize, // the window size has changed. This event is always sent when the loop
+    focus_in,
+    focus_out,
+    paste_start,
+    paste_end,
+    paste: []const u8,
+    color_report: vaxis.Color.Report,
+    color_scheme: vaxis.Color.Scheme,
+    winsize: vaxis.Winsize,
 };
 
 const ThemingOption = struct {
@@ -115,7 +115,6 @@ const PaletteThemify = struct {
         try self.vx.queryTerminal(self.tty.writer(), 1 * std.time.ns_per_s);
         try self.vx.setMouseMode(self.tty.writer(), true);
 
-        // Main event loop: poll events, update state, draw, render
         while (!self.should_quit) {
             loop.pollEvent();
             while (loop.tryEvent()) |event| {
@@ -126,14 +125,33 @@ const PaletteThemify = struct {
         }
     }
 
+    fn goBackToImageInput(self: *PaletteThemify) void {
+        if (self.colors) |colors| {
+            self.allocator.free(colors);
+            self.colors = null;
+        }
+        if (self.user_given_path) |path| {
+            self.allocator.free(path);
+            self.user_given_path = null;
+        }
+        if (self.status_message) |msg| {
+            self.allocator.free(msg);
+            self.status_message = null;
+        }
+        self.status_is_error = false;
+        self.selected_option_index = 0;
+        self.scroll_offset = 0;
+    }
+
     pub fn update(self: *PaletteThemify, event: Event) !void {
         switch (event) {
             .key_press => |key| {
                 if (key.matches('c', .{ .ctrl = true })) {
                     self.should_quit = true;
                 } else if (self.colors != null) {
-                    // Scroll controls
-                    if (key.matches(vaxis.Key.page_up, .{})) {
+                    if (key.matches(vaxis.Key.escape, .{}) or key.matches(vaxis.Key.backspace, .{})) {
+                        self.goBackToImageInput();
+                    } else if (key.matches(vaxis.Key.page_up, .{})) {
                         self.scroll_offset = @max(0, self.scroll_offset - 5);
                     } else if (key.matches(vaxis.Key.page_down, .{})) {
                         self.scroll_offset += 5;
@@ -141,9 +159,7 @@ const PaletteThemify = struct {
                         self.scroll_offset = @max(0, self.scroll_offset - 1);
                     } else if (key.matches(vaxis.Key.down, .{ .ctrl = true })) {
                         self.scroll_offset += 1;
-                    }
-                    // Navigate theming options
-                    else if (key.matches(vaxis.Key.up, .{}) or key.matches('k', .{})) {
+                    } else if (key.matches(vaxis.Key.up, .{}) or key.matches('k', .{})) {
                         if (self.selected_option_index > 0) {
                             self.selected_option_index -= 1;
                         }
@@ -174,10 +190,20 @@ const PaletteThemify = struct {
                         if (self.status_message) |old_msg| {
                             self.allocator.free(old_msg);
                         }
+                        const error_msg = switch (err) {
+                            error.FileNotFound => "File not found. Please check the path and try again.",
+                            error.AccessDenied => "Access denied. You don't have permission to read this file.",
+                            error.IsDir => "The path is a directory, not an image file.",
+                            error.InvalidCharacter => "The path contains invalid characters.",
+                            error.NoColors => "Could not extract any colors from the image. Try a different image.",
+                            error.NotAnImage => "The file is not a valid image. Supported formats: PNG, JPEG, BMP, etc.",
+                            error.OutOfMemory => "Out of memory. Try a smaller image.",
+                            else => @errorName(err),
+                        };
                         self.status_message = std.fmt.allocPrint(
                             self.allocator,
-                            "Failed to load image: {s}",
-                            .{@errorName(err)},
+                            "Error: {s}",
+                            .{error_msg},
                         ) catch null;
                         self.status_is_error = true;
                     };
@@ -187,7 +213,6 @@ const PaletteThemify = struct {
             },
             .mouse => |mouse| {
                 self.mouse = mouse;
-                // Handle mouse scroll for colors view
                 if (self.colors != null) {
                     if (mouse.button == .wheel_up) {
                         self.scroll_offset = @max(0, self.scroll_offset - 3);
@@ -207,7 +232,6 @@ const PaletteThemify = struct {
         self.vx.setMouseShape(.default);
 
         if (self.colors != null) {
-            // Create a scrollable child window
             const scroll_extra: u16 = @intCast(@max(0, self.scroll_offset));
             const scrolled_win = win.child(.{
                 .x_off = 0,
@@ -221,7 +245,6 @@ const PaletteThemify = struct {
         }
     }
 
-    /// Draw the initial file path input screen
     fn drawTextInput(self: *PaletteThemify, win: vaxis.Window) void {
         const text_input_win = win.child(.{
             .x_off = 2,
@@ -265,34 +288,44 @@ const PaletteThemify = struct {
         const style = vaxis.Cell.Style{ .fg = .{ .index = 7 } };
         self.text_input.drawWithStyle(padded_input, style);
 
-        const msg_win = win.child(.{
-            .x_off = 2,
-            .y_off = 8,
-            .width = 50,
-            .height = 1,
-        });
+        if (self.status_message) |msg| {
+            const status_win = win.child(.{
+                .x_off = 2,
+                .y_off = 8,
+                .width = @intCast(@min(win.width - 4, 80)),
+                .height = 2,
+            });
 
-        if (self.user_given_path) |text| {
-            const msg_segment = [_]vaxis.Cell.Segment{
+            const status_segment = [_]vaxis.Cell.Segment{
                 .{
-                    .text = "You entered: ",
+                    .text = msg,
                     .style = .{
-                        .fg = .{ .index = 10 },
-                    },
-                },
-                .{
-                    .text = text,
-                    .style = .{
-                        .fg = .{ .index = 14 },
+                        .fg = if (self.status_is_error) .{ .index = 1 } else .{ .index = 2 },
                         .bold = true,
                     },
                 },
             };
-            _ = msg_win.print(&msg_segment, .{});
+            _ = status_win.print(&status_segment, .{});
         }
+
+        const help_win = win.child(.{
+            .x_off = 2,
+            .y_off = 11,
+            .width = 60,
+            .height = 1,
+        });
+
+        const help_segment = [_]vaxis.Cell.Segment{
+            .{
+                .text = "(Enter: load image, Ctrl+C: quit)",
+                .style = .{
+                    .fg = .{ .index = 8 },
+                },
+            },
+        };
+        _ = help_win.print(&help_segment, .{});
     }
 
-    /// Draw the color palette and theming options menu
     fn drawColorPalette(self: *PaletteThemify, win: vaxis.Window) void {
         const title_segment = [_]vaxis.Cell.Segment{
             .{
@@ -317,7 +350,6 @@ const PaletteThemify = struct {
         const spacing: usize = 1;
         const margin: usize = 2;
 
-        // Calculate how many boxes fit per row based on window width
         const available_width = win.width - margin;
         const boxes_per_row = @max(1, available_width / (box_width + spacing));
 
@@ -328,11 +360,8 @@ const PaletteThemify = struct {
             const x_pos: usize = margin + col * (box_width + spacing);
             const y_pos: usize = 3 + row * (box_height + 1);
 
-            const r: u8 = @intFromFloat(@min(255, @max(0, color.r * 255)));
-            const g: u8 = @intFromFloat(@min(255, @max(0, color.g * 255)));
-            const b: u8 = @intFromFloat(@min(255, @max(0, color.b * 255)));
-
-            const bg_color = vaxis.Color{ .rgb = [3]u8{ r, g, b } };
+            const rgb = color_utils.colorf32ToRgb(color.r, color.g, color.b);
+            const bg_color = vaxis.Color{ .rgb = [3]u8{ rgb.r, rgb.g, rgb.b } };
 
             var y: usize = 0;
             while (y < box_height) : (y += 1) {
@@ -350,7 +379,6 @@ const PaletteThemify = struct {
             }
         }
 
-        // Calculate dynamic y position for menu based on number of color rows
         const total_rows = (self.colors.?.len + boxes_per_row - 1) / boxes_per_row;
         const menu_y_offset: usize = 3 + total_rows * (box_height + 1) + 1;
 
@@ -412,18 +440,17 @@ const PaletteThemify = struct {
             _ = option_win.print(&name_segment, .{ .col_offset = col });
         }
 
-        // Adjust help text based on window width
         const help_y = menu_y_offset + 2 + theming_options.len * 2 + 1;
         const available_help_width = if (win.width > 4) win.width - 4 else 1;
 
-        const help_text = if (available_help_width >= 70)
-            "(↑/↓ or j/k: navigate, Enter: select, PgUp/PgDn: scroll, Ctrl+C: quit)"
-        else if (available_help_width >= 50)
-            "(j/k: navigate, Enter: select, PgUp/PgDn: scroll)"
-        else if (available_help_width >= 30)
-            "(j/k/Enter, PgUp/PgDn)"
+        const help_text = if (available_help_width >= 80)
+            "(↑/↓ or j/k: navigate, Enter: select, Esc: go back, PgUp/PgDn: scroll, Ctrl+C: quit)"
+        else if (available_help_width >= 60)
+            "(j/k: navigate, Enter: select, Esc: back, PgUp/PgDn: scroll)"
+        else if (available_help_width >= 40)
+            "(j/k/Enter, Esc: back, PgUp/PgDn)"
         else
-            "(j/k/Enter)";
+            "(j/k/Enter, Esc)";
 
         const help_segment = [_]vaxis.Cell.Segment{
             .{
@@ -442,7 +469,6 @@ const PaletteThemify = struct {
         });
         _ = help_win.print(&help_segment, .{});
 
-        // Display status message if available
         if (self.status_message) |msg| {
             const status_y = help_y + 2;
             const status_segment = [_]vaxis.Cell.Segment{
@@ -465,59 +491,84 @@ const PaletteThemify = struct {
         }
     }
 
+    /// Load an image from user_given_path, extract colors by grouping similar pixels,
+    /// and store the top 15 most frequent colors sorted by occurrence count.
     pub fn processUserPath(self: *PaletteThemify) !void {
-        if (self.user_given_path) |path| {
-            var fs = std.fs.cwd();
-            const file = try fs.openFile(path, .{});
-            defer file.close();
+        const path = self.user_given_path orelse return;
 
-            var read_buffer: [zigimg.io.DEFAULT_BUFFER_SIZE]u8 = undefined;
-            var img = try zigimg.Image.fromFile(self.allocator, file, &read_buffer);
-            defer img.deinit(self.allocator);
+        if (path.len == 0) {
+            return error.FileNotFound;
+        }
 
-            if (self.colors) |old_colors| {
-                self.allocator.free(old_colors);
+        var fs = std.fs.cwd();
+        const file = fs.openFile(path, .{}) catch |err| {
+            return switch (err) {
+                error.FileNotFound => error.FileNotFound,
+                error.AccessDenied => error.AccessDenied,
+                error.IsDir => error.IsDir,
+                error.InvalidUtf8 => error.InvalidCharacter,
+                else => err,
+            };
+        };
+        defer file.close();
+
+        var read_buffer: [zigimg.io.DEFAULT_BUFFER_SIZE]u8 = undefined;
+        var img = zigimg.Image.fromFile(self.allocator, file, &read_buffer) catch {
+            return error.NotAnImage;
+        };
+        defer img.deinit(self.allocator);
+
+        if (self.colors) |old_colors| {
+            self.allocator.free(old_colors);
+        }
+
+        var color_map = std.ArrayList(ColorAndCount){};
+        defer color_map.deinit(self.allocator);
+
+        var color_it = img.iterator();
+        while (color_it.next()) |color| {
+            if (color.a < 0.01) continue;
+
+            var found = false;
+            for (color_map.items) |*item| {
+                if (ColorAndCount.colorSimilar(item.color, color)) {
+                    item.count += 1;
+                    found = true;
+                    break;
+                }
             }
 
-            var color_map = std.ArrayList(ColorAndCount){};
-            defer color_map.deinit(self.allocator);
-
-            var color_it = img.iterator();
-            while (color_it.next()) |color| {
-                if (color.a < 0.01) continue;
-
-                var found = false;
-                for (color_map.items) |*item| {
-                    if (ColorAndCount.colorSimilar(item.color, color)) {
-                        item.count += 1;
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
-                    try color_map.append(self.allocator, .{
-                        .color = color,
-                        .count = 1,
-                    });
-                }
-            }
-
-            std.mem.sort(ColorAndCount, color_map.items, {}, ColorAndCount.lessThan);
-
-            const num_colors = @min(9, color_map.items.len);
-            self.colors = try self.allocator.alloc(zigimg.color.Colorf32, num_colors);
-
-            for (0..num_colors) |i| {
-                self.colors.?[i] = color_map.items[i].color;
+            if (!found) {
+                try color_map.append(self.allocator, .{
+                    .color = color,
+                    .count = 1,
+                });
             }
         }
+
+        if (color_map.items.len == 0) {
+            return error.NoColors;
+        }
+
+        std.mem.sort(ColorAndCount, color_map.items, {}, ColorAndCount.lessThan);
+
+        const num_colors = @min(18, color_map.items.len);
+        self.colors = try self.allocator.alloc(zigimg.color.Colorf32, num_colors);
+
+        for (0..num_colors) |i| {
+            self.colors.?[i] = color_map.items[i].color;
+        }
+
+        if (self.status_message) |old_msg| {
+            self.allocator.free(old_msg);
+            self.status_message = null;
+        }
+        self.status_is_error = false;
     }
 
     fn generateAndInstallTheme(self: *PaletteThemify) !void {
         const selected_option = theming_options[self.selected_option_index];
 
-        // Clear previous status message
         if (self.status_message) |old_msg| {
             self.allocator.free(old_msg);
             self.status_message = null;
@@ -525,7 +576,6 @@ const PaletteThemify = struct {
 
         if (std.mem.eql(u8, selected_option.name, "VSCode")) {
             if (self.colors) |colors| {
-                // Show working status
                 self.status_message = try std.fmt.allocPrint(
                     self.allocator,
                     "Generating VS Code theme...",
@@ -533,7 +583,6 @@ const PaletteThemify = struct {
                 );
                 self.status_is_error = false;
 
-                // Convert colors to hex strings format expected by generateVSCodeTheme
                 var hex_colors = try self.allocator.alloc([]const u8, colors.len);
                 defer {
                     for (hex_colors) |hex| {
@@ -543,14 +592,9 @@ const PaletteThemify = struct {
                 }
 
                 for (colors, 0..) |color, i| {
-                    const r: u8 = @intFromFloat(@min(255.0, @max(0.0, color.r * 255.0)));
-                    const g: u8 = @intFromFloat(@min(255.0, @max(0.0, color.g * 255.0)));
-                    const b: u8 = @intFromFloat(@min(255.0, @max(0.0, color.b * 255.0)));
-
-                    hex_colors[i] = try std.fmt.allocPrint(self.allocator, "#{X:0>2}{X:0>2}{X:0>2}", .{ r, g, b });
+                    hex_colors[i] = try color_utils.colorf32ToHex(self.allocator, color.r, color.g, color.b);
                 }
 
-                // Generate the theme
                 const theme = try palette_themify.vscode.generateVSCodeTheme(
                     self.allocator,
                     hex_colors,
@@ -559,7 +603,6 @@ const PaletteThemify = struct {
                     self.allocator.free(theme.tokenColors);
                 }
 
-                // Install the theme to VS Code
                 const install_path = try palette_themify.vscode.installThemeToVSCode(
                     self.allocator,
                     theme,
@@ -567,7 +610,6 @@ const PaletteThemify = struct {
                 );
                 defer self.allocator.free(install_path);
 
-                // Update status message with success
                 if (self.status_message) |old_msg| {
                     self.allocator.free(old_msg);
                 }
@@ -606,10 +648,8 @@ pub fn main() !void {
     }
     const allocator = gpa.allocator();
 
-    // Initialize our application
     var app = try PaletteThemify.init(allocator);
     defer app.deinit();
 
-    // Run the application
     try app.run();
 }

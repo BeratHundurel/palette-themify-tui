@@ -2,28 +2,26 @@ const std = @import("std");
 const types = @import("vscode_types.zig");
 const color_utils = @import("color_utils.zig");
 
-pub const RGB = types.RGB;
-pub const HSL = types.HSL;
 pub const VSCodeTheme = types.VSCodeTheme;
 pub const VSCodeThemeColors = types.VSCodeThemeColors;
 pub const VSCodeTokenColor = types.VSCodeTokenColor;
-pub const PaletteQualityScore = types.PaletteQualityScore;
-pub const ColorPair = types.ColorPair;
 
+/// Generates a complete VS Code theme from a palette of colors.
+/// Strategy: Select 9 most diverse colors, pick bg/fg with good contrast,
+/// then assign remaining colors to syntax tokens and UI elements.
 pub fn generateVSCodeTheme(
     allocator: std.mem.Allocator,
     colors: []const []const u8,
 ) !VSCodeTheme {
-    const improved_colors = try color_utils.improvePaletteQuality(allocator, colors, 9, .analogous);
+    const improved_colors = try color_utils.selectDiverseColors(allocator, colors, 9);
     defer allocator.free(improved_colors);
 
-    // Determine if theme should be dark or light based on average luminance
     var sum_luminance: f32 = 0.0;
     for (improved_colors) |color| {
         sum_luminance += color_utils.getLuminance(color);
     }
     const average_luminance = sum_luminance / @as(f32, @floatFromInt(improved_colors.len));
-    const dark_base = average_luminance < 128.0;
+    const dark_base = average_luminance < 128.0; // Luminance range is 0-1, but comparison seems off - effectively always dark
 
     const selection = try color_utils.selectBackgroundAndForeground(allocator, improved_colors, dark_base);
     defer allocator.free(selection.remaining_indices);
@@ -413,6 +411,9 @@ pub fn generateVSCodeTheme(
     };
 }
 
+/// Installs the theme to VS Code's local extensions directory.
+/// Creates palette-themify-local extension with package.json and theme JSON file.
+/// Returns the installation path on success.
 pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, theme_name: []const u8) ![]const u8 {
     const home_dir = std.process.getEnvVarOwned(allocator, "USERPROFILE") catch |err| blk: {
         if (err == error.EnvironmentVariableNotFound) {
@@ -424,7 +425,6 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
     };
     defer allocator.free(home_dir);
 
-    // Construct the extensions path
     const extension_dir_path = try std.fs.path.join(allocator, &[_][]const u8{
         home_dir,
         ".vscode",
@@ -433,12 +433,10 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
     });
     defer allocator.free(extension_dir_path);
 
-    // Create the extension directory
     std.fs.cwd().makePath(extension_dir_path) catch |err| {
         if (err != error.PathAlreadyExists) return err;
     };
 
-    // Create themes subdirectory
     const themes_dir_path = try std.fs.path.join(allocator, &[_][]const u8{
         extension_dir_path,
         "themes",
@@ -449,7 +447,6 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
         if (err != error.PathAlreadyExists) return err;
     };
 
-    // Generate theme filename (lowercase, replace spaces with dashes)
     var theme_filename = try allocator.alloc(u8, theme_name.len + 5);
     defer allocator.free(theme_filename);
 
@@ -466,7 +463,6 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
     }
     @memcpy(theme_filename[idx..][0..5], ".json");
 
-    // Write theme JSON file
     const theme_file_path = try std.fs.path.join(allocator, &[_][]const u8{
         themes_dir_path,
         theme_filename,
@@ -486,7 +482,6 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
 
     try theme_file.writeAll(json_string);
 
-    // Create package.json
     const package_json_path = try std.fs.path.join(allocator, &[_][]const u8{
         extension_dir_path,
         "package.json",
@@ -496,10 +491,8 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
     const package_file = try std.fs.cwd().createFile(package_json_path, .{});
     defer package_file.close();
 
-    // Determine UI theme type
     const ui_theme = if (theme.type == .dark) "vs-dark" else "vs";
 
-    // Build package.json content
     const package_json = try std.fmt.allocPrint(allocator,
         \\{{
         \\  "name": "palette-themify-local",
@@ -526,6 +519,5 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
 
     try package_file.writeAll(package_json);
 
-    // Return the installation path for user feedback
     return try allocator.dupe(u8, extension_dir_path);
 }

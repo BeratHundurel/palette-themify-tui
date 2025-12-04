@@ -3,9 +3,8 @@ const types = @import("vscode_types.zig");
 
 pub const RGB = types.RGB;
 pub const HSL = types.HSL;
-pub const PaletteQualityScore = types.PaletteQualityScore;
+pub const LAB = types.LAB;
 pub const HarmonyScheme = types.HarmonyScheme;
-pub const ColorPair = types.ColorPair;
 
 pub const BackgroundForegroundSelection = struct {
     background_index: usize,
@@ -33,6 +32,73 @@ pub fn rgbDistance(hex_1: []const u8, hex_2: []const u8) f32 {
     return rgbDistanceFromRgb(rgb1, rgb2);
 }
 
+/// Converts RGB to CIE LAB color space for perceptually uniform color comparisons.
+/// Uses sRGB with D65 illuminant as the reference white point.
+fn rgbToLab(rgb: RGB) LAB {
+    var r = @as(f32, @floatFromInt(rgb.r)) / 255.0;
+    var g = @as(f32, @floatFromInt(rgb.g)) / 255.0;
+    var b = @as(f32, @floatFromInt(rgb.b)) / 255.0;
+
+    r = if (r > 0.04045) std.math.pow(f32, (r + 0.055) / 1.055, 2.4) else r / 12.92;
+    g = if (g > 0.04045) std.math.pow(f32, (g + 0.055) / 1.055, 2.4) else g / 12.92;
+    b = if (b > 0.04045) std.math.pow(f32, (b + 0.055) / 1.055, 2.4) else b / 12.92;
+
+    const x = (r * 0.4124564 + g * 0.3575761 + b * 0.1804375) / 0.95047;
+    const y = (r * 0.2126729 + g * 0.7151522 + b * 0.0721750) / 1.00000;
+    const z = (r * 0.0193339 + g * 0.1191920 + b * 0.9503041) / 1.08883;
+
+    const epsilon: f32 = 0.008856;
+    const kappa: f32 = 903.3;
+
+    const fx = if (x > epsilon) std.math.pow(f32, x, 1.0 / 3.0) else (kappa * x + 16.0) / 116.0;
+    const fy = if (y > epsilon) std.math.pow(f32, y, 1.0 / 3.0) else (kappa * y + 16.0) / 116.0;
+    const fz = if (z > epsilon) std.math.pow(f32, z, 1.0 / 3.0) else (kappa * z + 16.0) / 116.0;
+
+    return LAB{
+        .l = 116.0 * fy - 16.0,
+        .a = 500.0 * (fx - fy),
+        .b = 200.0 * (fy - fz),
+    };
+}
+
+/// CIE94 color difference formula - measures perceptual distance between two LAB colors.
+/// Simpler than CIEDE2000 but still provides good perceptual uniformity for theme generation.
+fn deltaE94(lab1: LAB, lab2: LAB) f32 {
+    const dl = lab1.l - lab2.l;
+    const da = lab1.a - lab2.a;
+    const db = lab1.b - lab2.b;
+
+    const c1 = @sqrt(lab1.a * lab1.a + lab1.b * lab1.b);
+    const c2 = @sqrt(lab2.a * lab2.a + lab2.b * lab2.b);
+    const dc = c1 - c2;
+
+    const dh_sq = da * da + db * db - dc * dc;
+    const dh = if (dh_sq > 0) @sqrt(dh_sq) else 0.0;
+
+    const kl: f32 = 1.0;
+    const kc: f32 = 1.0;
+    const kh: f32 = 1.0;
+
+    const sl: f32 = 1.0;
+    const sc = 1.0 + 0.045 * c1;
+    const sh = 1.0 + 0.015 * c1;
+
+    const dl_term = dl / (kl * sl);
+    const dc_term = dc / (kc * sc);
+    const dh_term = dh / (kh * sh);
+
+    return @sqrt(dl_term * dl_term + dc_term * dc_term + dh_term * dh_term);
+}
+
+pub fn perceptualDistance(hex1: []const u8, hex2: []const u8) f32 {
+    const rgb1 = parseHexToRgb(hex1);
+    const rgb2 = parseHexToRgb(hex2);
+    const lab1 = rgbToLab(rgb1);
+    const lab2 = rgbToLab(rgb2);
+    return deltaE94(lab1, lab2);
+}
+
+/// Calculates relative luminance per WCAG 2.0 spec for contrast ratio calculations.
 inline fn getLuminanceFromRgb(rgb: RGB) f32 {
     const rsRGB = @as(f32, @floatFromInt(rgb.r)) / 255.0;
     const gsRGB = @as(f32, @floatFromInt(rgb.g)) / 255.0;
@@ -89,6 +155,7 @@ pub fn contrastRatio(hex1: []const u8, hex2: []const u8) f32 {
     return (lighter + 0.05) / (darker + 0.05);
 }
 
+/// Uses YIQ luminance formula (weighted RGB based on human perception) to determine if a color is dark.
 inline fn isDarkColorFromRgb(rgb: RGB) bool {
     const brightness = (@as(f32, @floatFromInt(rgb.r)) * 299.0 + @as(f32, @floatFromInt(rgb.g)) * 587.0 + @as(f32, @floatFromInt(rgb.b)) * 114.0) / 255000.0;
     return brightness < 0.5;
@@ -99,25 +166,33 @@ pub fn isDarkColor(hex: []const u8) bool {
     return isDarkColorFromRgb(rgb);
 }
 
+/// Adjusts a foreground color to meet minimum contrast ratio against a background.
+/// First reduces saturation/brightness of overly vibrant colors, then iteratively
+/// lightens or darkens until min_contrast is met.
 pub fn adjustForContrast(fg: []const u8, bg: []const u8, min_contrast: f32) []const u8 {
     var color = fg;
     var iterations: u32 = 0;
     const dark_bg = isDarkColor(bg);
 
-    // Tame overly bright/saturated colors
     const hsl = hexToHsl(color);
-    if (dark_bg and hsl.s > 0.7 and hsl.l > 0.65) {
-        const new_l = 0.55 + (hsl.l - 0.65) * 0.3;
-        const new_s = @min(hsl.s, 0.75);
-        const rgb = hslToRgb(hsl.h, new_s, new_l);
-        color = rgbToHex(rgb.r, rgb.g, rgb.b);
+    if (dark_bg) {
+        if (hsl.s > 0.6 and hsl.l > 0.55) {
+            const new_l = 0.45 + (hsl.l - 0.55) * 0.2;
+            const new_s = @min(hsl.s, 0.70);
+            const rgb = hslToRgb(hsl.h, new_s, new_l);
+            color = rgbToHex(rgb.r, rgb.g, rgb.b);
+        } else if (hsl.s > 0.75 and hsl.l > 0.45) {
+            const new_l = hsl.l * 0.9;
+            const new_s = hsl.s * 0.8;
+            const rgb = hslToRgb(hsl.h, new_s, new_l);
+            color = rgbToHex(rgb.r, rgb.g, rgb.b);
+        }
     } else if (!dark_bg and hsl.s > 0.8 and hsl.l > 0.4 and hsl.l < 0.6) {
         const new_s = hsl.s * 0.7;
         const rgb = hslToRgb(hsl.h, new_s, hsl.l);
         color = rgbToHex(rgb.r, rgb.g, rgb.b);
     }
 
-    // Then ensure minimum contrast
     while (contrastRatio(color, bg) < min_contrast and iterations < 20) : (iterations += 1) {
         color = if (dark_bg) lightenColor(color, 0.1) else darkenColor(color, 0.1);
     }
@@ -125,6 +200,8 @@ pub fn adjustForContrast(fg: []const u8, bg: []const u8, min_contrast: f32) []co
     return color;
 }
 
+/// Multi-stage fallback to ensure readable contrast. Tries adjustment first, then
+/// creates a tinted fallback preserving hue, finally falls back to near-neutral if needed.
 pub fn ensureReadableContrast(proposed_color: []const u8, background: []const u8, min_contrast: f32) []const u8 {
     if (contrastRatio(proposed_color, background) >= min_contrast) {
         return proposed_color;
@@ -219,275 +296,88 @@ pub fn rgbToHex(r: u8, g: u8, b: u8) []const u8 {
     return std.fmt.allocPrint(std.heap.page_allocator, "#{X:0>2}{X:0>2}{X:0>2}", .{ r, g, b }) catch "#000000";
 }
 
-pub fn calculatePaletteQuality(allocator: std.mem.Allocator, colors: []const []const u8) !PaletteQualityScore {
-    if (colors.len < 2) {
-        return PaletteQualityScore{
-            .score = 100,
-            .minDistance = 0.0,
-            .avgDistance = 0.0,
-            .poorPairs = &[_]ColorPair{},
-            .isGoodQuality = true,
-        };
-    }
+pub fn rgbToHexAlloc(allocator: std.mem.Allocator, r: u8, g: u8, b: u8) ![]const u8 {
+    return try std.fmt.allocPrint(allocator, "#{X:0>2}{X:0>2}{X:0>2}", .{ r, g, b });
+}
 
-    var distances = std.ArrayList(f32){};
-    defer distances.deinit(allocator);
-
-    var poor_pairs = std.ArrayList(ColorPair){};
-    defer poor_pairs.deinit(allocator);
-
-    const POOR_THRESHOLD: f32 = 50.0;
-
-    var i: usize = 0;
-    while (i < colors.len) : (i += 1) {
-        var j: usize = i + 1;
-        while (j < colors.len) : (j += 1) {
-            const dist = rgbDistance(colors[i], colors[j]);
-            try distances.append(dist);
-
-            if (dist < POOR_THRESHOLD) {
-                try poor_pairs.append(ColorPair{
-                    .color1 = colors[i],
-                    .color2 = colors[j],
-                    .distance = dist,
-                });
-            }
-        }
-    }
-
-    var min_distance: f32 = std.math.floatMax(f32);
-    var sum: f32 = 0.0;
-    for (distances.items) |d| {
-        if (d < min_distance) min_distance = d;
-        sum += d;
-    }
-
-    const avg_distance = sum / @as(f32, @floatFromInt(distances.items.len));
-    const score_float = @min(100.0, (min_distance / 100.0) * 50.0 + (avg_distance / 150.0) * 50.0);
-    const score = @as(u32, @intFromFloat(@round(score_float)));
-
-    std.mem.sort(ColorPair, poor_pairs.items, {}, struct {
-        fn lessThan(_: void, a: ColorPair, b: ColorPair) bool {
-            return a.distance < b.distance;
-        }
-    }.lessThan);
-
-    const poor_pairs_owned = try allocator.dupe(ColorPair, poor_pairs.items);
-
-    return PaletteQualityScore{
-        .score = score,
-        .minDistance = @round(min_distance),
-        .avgDistance = @round(avg_distance),
-        .poorPairs = poor_pairs_owned,
-        .isGoodQuality = score >= 60 and min_distance >= 40.0,
+pub fn colorf32ToRgb(r: f32, g: f32, b: f32) RGB {
+    return RGB{
+        .r = @intFromFloat(@min(255.0, @max(0.0, r * 255.0))),
+        .g = @intFromFloat(@min(255.0, @max(0.0, g * 255.0))),
+        .b = @intFromFloat(@min(255.0, @max(0.0, b * 255.0))),
     };
 }
 
+pub fn colorf32ToHex(allocator: std.mem.Allocator, r: f32, g: f32, b: f32) ![]const u8 {
+    const rgb = colorf32ToRgb(r, g, b);
+    return try rgbToHexAlloc(allocator, rgb.r, rgb.g, rgb.b);
+}
+
+/// Selects `count` maximally diverse colors using a greedy farthest-point sampling algorithm.
+/// Starts with the color most distant from all others, then iteratively picks the color
+/// with maximum minimum distance to already-selected colors.
 pub fn selectDiverseColors(allocator: std.mem.Allocator, colors: []const []const u8, count: usize) ![][]const u8 {
     var selected = std.ArrayList([]const u8){};
     defer selected.deinit(allocator);
 
-    var used_indices = std.ArrayList(usize){};
-    defer used_indices.deinit(allocator);
+    var best_start_idx: usize = 0;
+    var best_start_score: f32 = 0.0;
+    for (colors, 0..) |color, i| {
+        var total_dist: f32 = 0.0;
+        for (colors) |other| {
+            if (!std.mem.eql(u8, color, other)) {
+                total_dist += perceptualDistance(color, other);
+            }
+        }
+        if (total_dist > best_start_score) {
+            best_start_score = total_dist;
+            best_start_idx = i;
+        }
+    }
+    try selected.append(allocator, colors[best_start_idx]);
 
-    const priority_count: usize = 5;
-    const priority_threshold: f32 = 30.0;
-    const normal_threshold: f32 = 50.0;
+    var safety_counter: usize = 0;
+    const max_iterations = count * colors.len;
 
-    for (0..@min(priority_count, colors.len)) |i| {
-        const candidate = colors[i];
+    while (selected.items.len < count and safety_counter < max_iterations) : (safety_counter += 1) {
+        var max_min_distance: f32 = 0.0;
+        var best_candidate: ?[]const u8 = null;
 
-        var too_similar = false;
-        for (selected.items) |s| {
-            if (rgbDistance(candidate, s) < priority_threshold) {
-                too_similar = true;
-                break;
+        for (colors) |candidate| {
+            var already_selected = false;
+            for (selected.items) |s| {
+                if (std.mem.eql(u8, s, candidate)) {
+                    already_selected = true;
+                    break;
+                }
+            }
+            if (already_selected) continue;
+
+            var min_distance: f32 = std.math.floatMax(f32);
+            for (selected.items) |s| {
+                const dist = perceptualDistance(candidate, s);
+                if (dist < min_distance) {
+                    min_distance = dist;
+                }
+            }
+
+            if (min_distance > max_min_distance) {
+                max_min_distance = min_distance;
+                best_candidate = candidate;
             }
         }
 
-        if (!too_similar) {
+        if (best_candidate) |candidate| {
             try selected.append(allocator, candidate);
-            try used_indices.append(allocator, i);
+        } else {
+            break;
         }
     }
 
-    const remaining_needed = count -| selected.items.len;
-    if (remaining_needed > 0) {
-        var candidates_with_index = std.ArrayList(struct { index: usize, color: []const u8 }){};
-        defer candidates_with_index.deinit(allocator);
-
-        for (priority_count..colors.len) |i| {
-            if (i < colors.len) {
-                try candidates_with_index.append(allocator, .{ .index = i, .color = colors[i] });
-            }
-        }
-
-        var added: usize = 0;
-        var safety_counter: usize = 0;
-        const max_iterations = remaining_needed * colors.len;
-
-        while (added < remaining_needed and safety_counter < max_iterations) : (safety_counter += 1) {
-            var max_min_distance: f32 = 0.0;
-            var best_candidate_idx: ?usize = null;
-
-            for (candidates_with_index.items, 0..) |entry, list_idx| {
-                var already_used = false;
-                for (used_indices.items) |used_idx| {
-                    if (used_idx == entry.index) {
-                        already_used = true;
-                        break;
-                    }
-                }
-                if (already_used) continue;
-
-                var min_distance: f32 = std.math.floatMax(f32);
-                for (selected.items) |s| {
-                    const dist = rgbDistance(entry.color, s);
-                    if (dist < min_distance) {
-                        min_distance = dist;
-                    }
-                }
-
-                if (min_distance >= normal_threshold and min_distance > max_min_distance) {
-                    max_min_distance = min_distance;
-                    best_candidate_idx = list_idx;
-                }
-            }
-
-            if (best_candidate_idx) |list_idx| {
-                const entry = candidates_with_index.items[list_idx];
-                try selected.append(allocator, entry.color);
-                try used_indices.append(allocator, entry.index);
-                added += 1;
-            } else {
-                for (candidates_with_index.items, 0..) |entry, list_idx| {
-                    var already_used = false;
-                    for (used_indices.items) |used_idx| {
-                        if (used_idx == entry.index) {
-                            already_used = true;
-                            break;
-                        }
-                    }
-                    if (!already_used) {
-                        var min_distance: f32 = std.math.floatMax(f32);
-                        for (selected.items) |s| {
-                            const dist = rgbDistance(entry.color, s);
-                            if (dist < min_distance) {
-                                min_distance = dist;
-                            }
-                        }
-                        if (min_distance > max_min_distance) {
-                            max_min_distance = min_distance;
-                            best_candidate_idx = list_idx;
-                        }
-                    }
-                }
-                if (best_candidate_idx) |list_idx| {
-                    const entry = candidates_with_index.items[list_idx];
-                    try selected.append(allocator, entry.color);
-                    try used_indices.append(allocator, entry.index);
-                    added += 1;
-                } else {
-                    break;
-                }
-            }
-        }
-    }
-
-    var result = std.ArrayList([]const u8){};
-    defer result.deinit(allocator);
-
-    for (used_indices.items) |idx| {
-        try result.append(allocator, colors[idx]);
-    }
-
-    return try allocator.dupe([]const u8, result.items);
+    return try allocator.dupe([]const u8, selected.items);
 }
 
-/// Enhance palette by adding harmony colors and selecting diverse subset
-pub fn improvePaletteQuality(allocator: std.mem.Allocator, colors: []const []const u8, target_count: usize, harmony_scheme: HarmonyScheme) ![][]const u8 {
-    if (colors.len >= target_count) {
-        return try selectDiverseColors(allocator, colors, target_count);
-    }
-
-    var enhanced = std.ArrayList([]const u8){};
-    defer enhanced.deinit(allocator);
-
-    // Start with original colors
-    for (colors) |color| {
-        try enhanced.append(allocator, color);
-    }
-
-    // Generate harmony colors from original palette to fill gaps
-    var i: usize = 0;
-    while (enhanced.items.len < target_count and i < colors.len) : (i += 1) {
-        const harmony_colors = try generateHarmonyColors(allocator, colors[i], harmony_scheme);
-        defer allocator.free(harmony_colors);
-
-        for (harmony_colors) |h_color| {
-            if (enhanced.items.len >= target_count) break;
-
-            // Check if color already exists
-            var exists = false;
-            for (enhanced.items) |existing| {
-                if (std.mem.eql(u8, existing, h_color)) {
-                    exists = true;
-                    break;
-                }
-            }
-
-            if (!exists) {
-                try enhanced.append(allocator, h_color);
-            }
-        }
-    }
-
-    return try selectDiverseColors(allocator, enhanced.items, target_count);
-}
-
-pub fn generateHarmonyColors(allocator: std.mem.Allocator, base_color: []const u8, scheme: HarmonyScheme) ![][]const u8 {
-    const hsl = hexToHsl(base_color);
-    var colors = std.ArrayList([]const u8){};
-    defer colors.deinit(allocator);
-
-    try colors.append(allocator, base_color);
-
-    switch (scheme) {
-        .complementary => {
-            const comp_h = @mod(hsl.h + 0.5, 1.0);
-            const rgb = hslToRgb(comp_h, hsl.s, hsl.l);
-            try colors.append(allocator, rgbToHex(rgb.r, rgb.g, rgb.b));
-        },
-        .triadic => {
-            const offsets = [_]f32{ 1.0 / 3.0, 2.0 / 3.0 };
-            for (offsets) |offset| {
-                const h = @mod(hsl.h + offset, 1.0);
-                const rgb = hslToRgb(h, hsl.s, hsl.l);
-                try colors.append(allocator, rgbToHex(rgb.r, rgb.g, rgb.b));
-            }
-        },
-        .analogous => {
-            const offsets = [_]f32{ -1.0 / 12.0, 1.0 / 12.0 };
-            for (offsets) |offset| {
-                const h = @mod(hsl.h + offset + 1.0, 1.0);
-                const rgb = hslToRgb(h, hsl.s, hsl.l);
-                try colors.append(allocator, rgbToHex(rgb.r, rgb.g, rgb.b));
-            }
-        },
-        .@"split-complementary" => {
-            const comp_h = @mod(hsl.h + 0.5, 1.0);
-            const offsets = [_]f32{ -1.0 / 12.0, 1.0 / 12.0 };
-            for (offsets) |offset| {
-                const h = @mod(comp_h + offset + 1.0, 1.0);
-                const rgb = hslToRgb(h, hsl.s, hsl.l);
-                try colors.append(allocator, rgbToHex(rgb.r, rgb.g, rgb.b));
-            }
-        },
-    }
-
-    return try allocator.dupe([]const u8, colors.items);
-}
-
+/// Generates a color based on color wheel harmony theory (complementary, triadic, etc.).
 pub fn getHarmonicColor(base_color: []const u8, scheme: HarmonyScheme) []const u8 {
     const hsl = hexToHsl(base_color);
 
@@ -502,6 +392,8 @@ pub fn getHarmonicColor(base_color: []const u8, scheme: HarmonyScheme) []const u
     return rgbToHex(rgb.r, rgb.g, rgb.b);
 }
 
+/// Scores a color's suitability as a background based on low saturation and
+/// appropriate luminance (dark for dark themes, light for light themes).
 fn calculateBackgroundScore(hex: []const u8, prefer_dark: bool) f32 {
     const hsl = hexToHsl(hex);
     const luminance = getLuminance(hex);
@@ -531,8 +423,6 @@ fn calculateBackgroundScore(hex: []const u8, prefer_dark: bool) f32 {
 }
 
 pub fn selectBackgroundColor(colors: []const []const u8, prefer_dark: bool) usize {
-    if (colors.len == 0) return 0;
-
     var best_index: usize = 0;
     var best_score: f32 = 0.0;
 
@@ -548,9 +438,6 @@ pub fn selectBackgroundColor(colors: []const []const u8, prefer_dark: bool) usiz
 }
 
 pub fn selectForegroundColor(colors: []const []const u8, background: []const u8, exclude_index: usize) usize {
-    if (colors.len == 0) return 0;
-    if (colors.len == 1) return 0;
-
     var best_index: usize = if (exclude_index == 0) 1 else 0;
     var best_contrast: f32 = 0.0;
 
@@ -568,10 +455,6 @@ pub fn selectForegroundColor(colors: []const []const u8, background: []const u8,
 }
 
 pub fn selectBackgroundAndForeground(allocator: std.mem.Allocator, colors: []const []const u8, prefer_dark: bool) !BackgroundForegroundSelection {
-    if (colors.len < 2) {
-        return error.NotEnoughColors;
-    }
-
     const bg_index = selectBackgroundColor(colors, prefer_dark);
     const fg_index = selectForegroundColor(colors, colors[bg_index], bg_index);
 

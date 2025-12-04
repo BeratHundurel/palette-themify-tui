@@ -2,9 +2,9 @@ const std = @import("std");
 
 // HSL color space representation (normalized 0.0 to 1.0)
 pub const HSL = struct {
-    h: f32, // 0.0 to 1.0
-    s: f32, // 0.0 to 1.0
-    l: f32, // 0.0 to 1.0
+    h: f32,
+    s: f32,
+    l: f32,
 };
 
 pub const RGB = struct {
@@ -13,20 +13,11 @@ pub const RGB = struct {
     b: u8,
 };
 
-// Represents a pair of colors with their perceptual distance
-pub const ColorPair = struct {
-    color1: []const u8,
-    color2: []const u8,
-    distance: f32,
-};
-
-// Overall quality assessment of a color palette
-pub const PaletteQualityScore = struct {
-    score: u32, // 0-100 quality score
-    minDistance: f32, // Minimum distance between any two colors
-    avgDistance: f32, // Average distance across all pairs
-    poorPairs: []ColorPair, // Pairs with distance below threshold
-    isGoodQuality: bool, // Quick check if palette meets quality standards
+// LAB color space for perceptual color calculations
+pub const LAB = struct {
+    l: f32, // Lightness: 0 to 100
+    a: f32, // Green-Red: -128 to 127
+    b: f32, // Blue-Yellow: -128 to 127
 };
 
 // Color harmony schemes based on color wheel relationships
