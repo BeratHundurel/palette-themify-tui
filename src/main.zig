@@ -56,6 +56,12 @@ const theming_options = [_]ThemingOption{
     .{ .name = "Zed" },
 };
 
+const AppState = enum {
+    image_input,
+    color_palette,
+    theme_name_input,
+};
+
 const PaletteThemify = struct {
     allocator: std.mem.Allocator,
     should_quit: bool,
@@ -63,12 +69,14 @@ const PaletteThemify = struct {
     vx: vaxis.Vaxis,
     mouse: ?vaxis.Mouse,
     text_input: TextInput,
+    theme_name_input: TextInput,
     user_given_path: ?[]const u8,
     colors: ?[]zigimg.color.Colorf32,
     selected_option_index: usize,
     scroll_offset: i16,
     status_message: ?[]const u8,
     status_is_error: bool,
+    current_state: AppState,
 
     pub fn init(allocator: std.mem.Allocator) !PaletteThemify {
         var buffer: [1024]u8 = undefined;
@@ -79,12 +87,14 @@ const PaletteThemify = struct {
             .vx = try vaxis.init(allocator, .{}),
             .mouse = null,
             .text_input = TextInput.init(allocator),
+            .theme_name_input = TextInput.init(allocator),
             .user_given_path = null,
             .colors = null,
             .selected_option_index = 0,
             .scroll_offset = 0,
             .status_message = null,
             .status_is_error = false,
+            .current_state = .image_input,
         };
     }
 
@@ -99,6 +109,7 @@ const PaletteThemify = struct {
             self.allocator.free(msg);
         }
         self.text_input.deinit();
+        self.theme_name_input.deinit();
         self.vx.deinit(self.allocator, self.tty.writer());
         self.tty.deinit();
     }
@@ -141,6 +152,20 @@ const PaletteThemify = struct {
         self.status_is_error = false;
         self.selected_option_index = 0;
         self.scroll_offset = 0;
+        self.current_state = .image_input;
+        self.theme_name_input.clearAndFree();
+    }
+
+    fn goBackToColorPalette(self: *PaletteThemify, clear_status: bool) void {
+        if (clear_status) {
+            if (self.status_message) |msg| {
+                self.allocator.free(msg);
+                self.status_message = null;
+            }
+            self.status_is_error = false;
+        }
+        self.current_state = .color_palette;
+        self.theme_name_input.clearAndFree();
     }
 
     pub fn update(self: *PaletteThemify, event: Event) !void {
@@ -148,7 +173,42 @@ const PaletteThemify = struct {
             .key_press => |key| {
                 if (key.matches('c', .{ .ctrl = true })) {
                     self.should_quit = true;
-                } else if (self.colors != null) {
+                } else if (self.current_state == .theme_name_input) {
+                    if (key.matches(vaxis.Key.escape, .{})) {
+                        self.goBackToColorPalette(true);
+                    } else if (key.matches(vaxis.Key.enter, .{})) {
+                        const theme_name = self.theme_name_input.toOwnedSlice() catch null;
+                        if (theme_name) |name| {
+                            defer self.allocator.free(name);
+                            if (name.len == 0) {
+                                if (self.status_message) |old_msg| {
+                                    self.allocator.free(old_msg);
+                                }
+                                self.status_message = std.fmt.allocPrint(
+                                    self.allocator,
+                                    "Please enter a theme name",
+                                    .{},
+                                ) catch null;
+                                self.status_is_error = true;
+                            } else {
+                                self.generateAndInstallTheme(name) catch |err| {
+                                    if (self.status_message) |old_msg| {
+                                        self.allocator.free(old_msg);
+                                    }
+                                    self.status_message = std.fmt.allocPrint(
+                                        self.allocator,
+                                        "Error: {s}",
+                                        .{@errorName(err)},
+                                    ) catch null;
+                                    self.status_is_error = true;
+                                };
+                                self.goBackToColorPalette(false);
+                            }
+                        }
+                    } else {
+                        try self.theme_name_input.update(.{ .key_press = key });
+                    }
+                } else if (self.current_state == .color_palette) {
                     if (key.matches(vaxis.Key.escape, .{}) or key.matches(vaxis.Key.backspace, .{})) {
                         self.goBackToImageInput();
                     } else if (key.matches(vaxis.Key.page_up, .{})) {
@@ -168,17 +228,24 @@ const PaletteThemify = struct {
                             self.selected_option_index += 1;
                         }
                     } else if (key.matches(vaxis.Key.enter, .{})) {
-                        self.generateAndInstallTheme() catch |err| {
+                        const selected_option = theming_options[self.selected_option_index];
+                        if (std.mem.eql(u8, selected_option.name, "VSCode")) {
+                            self.current_state = .theme_name_input;
+                            if (self.status_message) |old_msg| {
+                                self.allocator.free(old_msg);
+                                self.status_message = null;
+                            }
+                        } else {
                             if (self.status_message) |old_msg| {
                                 self.allocator.free(old_msg);
                             }
                             self.status_message = std.fmt.allocPrint(
                                 self.allocator,
-                                "Error: {s}",
-                                .{@errorName(err)},
+                                "Theme type '{s}' not yet implemented",
+                                .{selected_option.name},
                             ) catch null;
                             self.status_is_error = true;
-                        };
+                        }
                     }
                 } else if (key.matches(vaxis.Key.enter, .{})) {
                     if (self.user_given_path) |old_text| {
@@ -213,7 +280,7 @@ const PaletteThemify = struct {
             },
             .mouse => |mouse| {
                 self.mouse = mouse;
-                if (self.colors != null) {
+                if (self.current_state == .color_palette) {
                     if (mouse.button == .wheel_up) {
                         self.scroll_offset = @max(0, self.scroll_offset - 3);
                     } else if (mouse.button == .wheel_down) {
@@ -231,17 +298,19 @@ const PaletteThemify = struct {
         win.clear();
         self.vx.setMouseShape(.default);
 
-        if (self.colors != null) {
-            const scroll_extra: u16 = @intCast(@max(0, self.scroll_offset));
-            const scrolled_win = win.child(.{
-                .x_off = 0,
-                .y_off = @intCast(-self.scroll_offset),
-                .width = win.width,
-                .height = @as(u16, @min(65535, @as(u32, win.height) + @as(u32, scroll_extra) + 100)),
-            });
-            self.drawColorPalette(scrolled_win);
-        } else {
-            self.drawTextInput(win);
+        switch (self.current_state) {
+            .image_input => self.drawTextInput(win),
+            .color_palette => {
+                const scroll_extra: u16 = @intCast(@max(0, self.scroll_offset));
+                const scrolled_win = win.child(.{
+                    .x_off = 0,
+                    .y_off = @intCast(-self.scroll_offset),
+                    .width = win.width,
+                    .height = @as(u16, @min(65535, @as(u32, win.height) + @as(u32, scroll_extra) + 100)),
+                });
+                self.drawColorPalette(scrolled_win);
+            },
+            .theme_name_input => self.drawThemeNameInput(win),
         }
     }
 
@@ -318,6 +387,105 @@ const PaletteThemify = struct {
         const help_segment = [_]vaxis.Cell.Segment{
             .{
                 .text = "(Enter: load image, Ctrl+C: quit)",
+                .style = .{
+                    .fg = .{ .index = 8 },
+                },
+            },
+        };
+        _ = help_win.print(&help_segment, .{});
+    }
+
+    fn drawThemeNameInput(self: *PaletteThemify, win: vaxis.Window) void {
+        const title_segment = [_]vaxis.Cell.Segment{
+            .{
+                .text = "Enter Theme Name",
+                .style = .{
+                    .fg = .{ .index = 15 },
+                    .bold = true,
+                },
+            },
+        };
+
+        const title_win = win.child(.{
+            .x_off = 2,
+            .y_off = 2,
+            .width = 50,
+            .height = 1,
+        });
+        _ = title_win.print(&title_segment, .{});
+
+        const text_input_win = win.child(.{
+            .x_off = 2,
+            .y_off = 4,
+            .width = 50,
+            .height = 3,
+            .border = .{
+                .where = .all,
+                .style = .{
+                    .fg = .{ .index = 6 },
+                },
+                .glyphs = .single_rounded,
+            },
+        });
+
+        const label_segment = [_]vaxis.Cell.Segment{
+            .{
+                .text = "Theme name:",
+                .style = .{
+                    .fg = .{ .index = 12 },
+                    .bold = true,
+                },
+            },
+        };
+
+        const label_win = win.child(.{
+            .x_off = 4,
+            .y_off = 4,
+            .width = 40,
+            .height = 1,
+        });
+        _ = label_win.print(&label_segment, .{});
+
+        const padded_input = text_input_win.child(.{
+            .x_off = 1,
+            .y_off = 0,
+            .width = text_input_win.width - 2,
+            .height = 1,
+        });
+
+        const style = vaxis.Cell.Style{ .fg = .{ .index = 7 } };
+        self.theme_name_input.drawWithStyle(padded_input, style);
+
+        if (self.status_message) |msg| {
+            const status_win = win.child(.{
+                .x_off = 2,
+                .y_off = 10,
+                .width = @intCast(@min(win.width - 4, 80)),
+                .height = 2,
+            });
+
+            const status_segment = [_]vaxis.Cell.Segment{
+                .{
+                    .text = msg,
+                    .style = .{
+                        .fg = if (self.status_is_error) .{ .index = 1 } else .{ .index = 2 },
+                        .bold = true,
+                    },
+                },
+            };
+            _ = status_win.print(&status_segment, .{});
+        }
+
+        const help_win = win.child(.{
+            .x_off = 2,
+            .y_off = 13,
+            .width = 60,
+            .height = 1,
+        });
+
+        const help_segment = [_]vaxis.Cell.Segment{
+            .{
+                .text = "(Enter: create theme, Esc: go back, Ctrl+C: quit)",
                 .style = .{
                     .fg = .{ .index = 8 },
                 },
@@ -564,9 +732,10 @@ const PaletteThemify = struct {
             self.status_message = null;
         }
         self.status_is_error = false;
+        self.current_state = .color_palette;
     }
 
-    fn generateAndInstallTheme(self: *PaletteThemify) !void {
+    fn generateAndInstallTheme(self: *PaletteThemify, theme_name: []const u8) !void {
         const selected_option = theming_options[self.selected_option_index];
 
         if (self.status_message) |old_msg| {
@@ -606,7 +775,7 @@ const PaletteThemify = struct {
                 const install_path = try palette_themify.vscode.installThemeToVSCode(
                     self.allocator,
                     theme,
-                    "Palette Theme",
+                    theme_name,
                 );
                 defer self.allocator.free(install_path);
 
