@@ -170,7 +170,17 @@ const PaletteThemify = struct {
                     }
                     self.user_given_path = try self.text_input.toOwnedSlice();
 
-                    try self.processUserPath();
+                    self.processUserPath() catch |err| {
+                        if (self.status_message) |old_msg| {
+                            self.allocator.free(old_msg);
+                        }
+                        self.status_message = std.fmt.allocPrint(
+                            self.allocator,
+                            "Failed to load image: {s}",
+                            .{@errorName(err)},
+                        ) catch null;
+                        self.status_is_error = true;
+                    };
                 } else {
                     try self.text_input.update(.{ .key_press = key });
                 }
@@ -495,7 +505,7 @@ const PaletteThemify = struct {
 
             std.mem.sort(ColorAndCount, color_map.items, {}, ColorAndCount.lessThan);
 
-            const num_colors = @min(12, color_map.items.len);
+            const num_colors = @min(9, color_map.items.len);
             self.colors = try self.allocator.alloc(zigimg.color.Colorf32, num_colors);
 
             for (0..num_colors) |i| {
@@ -544,7 +554,6 @@ const PaletteThemify = struct {
                 const theme = try palette_themify.vscode.generateVSCodeTheme(
                     self.allocator,
                     hex_colors,
-                    .complementary,
                 );
                 defer {
                     self.allocator.free(theme.tokenColors);

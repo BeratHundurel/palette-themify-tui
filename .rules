@@ -1,0 +1,18 @@
+# AI Coding Instructions
+
+## Architecture Overview
+
+This is a tui application for extracting common colors from an image and generating themes with it.
+
+### Key Technical Patterns
+- **Zig Language**: The entire application is written in Zig 0.15.2, leveraging its performance and safety features.
+- **Image Processing**: Uses `zigimg` library for image loading and pixel manipulation.
+- **Color Theory**: Implements color distance calculations and contrast adjustments for better theme generation.
+- **Tui Interface**: Uses `libvaxis` library for terminal-based user interface.
+
+
+### Some Rules to Follow
+- Check if the code is compiling and running correctly after making changes.
+- Follow the zig 0.15.2 syntax and best practices.
+- Don't create .md files unless specifically asked.
+- Dont over comment the code. Only add comments where necessary for clarity.

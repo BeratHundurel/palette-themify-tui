@@ -82,19 +82,19 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-    
+
     const vaxis = b.dependency("vaxis", .{
         .target = target,
         .optimize = optimize,
     });
 
     exe.root_module.addImport("vaxis", vaxis.module("vaxis"));
-    
+
     const zigimg_dependency = b.dependency("zigimg", .{
         .target = target,
         .optimize = optimize,
     });
-    
+
     exe.root_module.addImport("zigimg", zigimg_dependency.module("zigimg"));
 
     // This declares intent for the executable to be installed into the

@@ -2,117 +2,93 @@ const std = @import("std");
 const types = @import("vscode_types.zig");
 const color_utils = @import("color_utils.zig");
 
-// Re-export types for convenience
+pub const RGB = types.RGB;
+pub const HSL = types.HSL;
 pub const VSCodeTheme = types.VSCodeTheme;
 pub const VSCodeThemeColors = types.VSCodeThemeColors;
 pub const VSCodeTokenColor = types.VSCodeTokenColor;
-pub const VSCodeTokenSettings = types.VSCodeTokenSettings;
-pub const ThemeType = types.ThemeType;
-pub const HarmonyScheme = types.HarmonyScheme;
-pub const RGB = types.RGB;
-pub const HSL = types.HSL;
-pub const ColorPair = types.ColorPair;
 pub const PaletteQualityScore = types.PaletteQualityScore;
+pub const ColorPair = types.ColorPair;
 
-// Re-export color utility functions
-pub const rgbDistance = color_utils.rgbDistance;
-pub const getLuminance = color_utils.getLuminance;
-pub const darkenColor = color_utils.darkenColor;
-pub const lightenColor = color_utils.lightenColor;
-pub const addAlpha = color_utils.addAlpha;
-pub const contrastRatio = color_utils.contrastRatio;
-pub const isDarkColor = color_utils.isDarkColor;
-pub const adjustForContrast = color_utils.adjustForContrast;
-pub const ensureReadableContrast = color_utils.ensureReadableContrast;
-pub const hexToHsl = color_utils.hexToHsl;
-pub const hslToRgb = color_utils.hslToRgb;
-pub const rgbToHex = color_utils.rgbToHex;
-pub const calculatePaletteQuality = color_utils.calculatePaletteQuality;
-pub const selectDiverseColors = color_utils.selectDiverseColors;
-pub const generateHarmonyColors = color_utils.generateHarmonyColors;
-pub const improvePaletteQuality = color_utils.improvePaletteQuality;
-
-// Generate a complete VSCode theme from a color palette
-// Requires at least 8 colors, automatically enhances to 12 if needed
 pub fn generateVSCodeTheme(
     allocator: std.mem.Allocator,
     colors: []const []const u8,
-    harmony_scheme: HarmonyScheme,
 ) !VSCodeTheme {
-    const improved_colors = try color_utils.improvePaletteQuality(allocator, colors, 12, harmony_scheme);
-
-    if (improved_colors.len < 8) {
-        return error.NotEnoughColors;
-    }
-
-    const c0 = improved_colors[0];
-    const c1_raw = improved_colors[1];
-    const c2_raw = improved_colors[2];
-    const c3_raw = improved_colors[3];
-    const c4_raw = improved_colors[4];
-    const c5_raw = improved_colors[5];
-    const c6_raw = improved_colors[6];
-    const c7_raw = improved_colors[7];
+    const improved_colors = try color_utils.improvePaletteQuality(allocator, colors, 9, .analogous);
+    defer allocator.free(improved_colors);
 
     // Determine if theme should be dark or light based on average luminance
     var sum_luminance: f32 = 0.0;
-    for (improved_colors[0..8]) |color| {
+    for (improved_colors) |color| {
         sum_luminance += color_utils.getLuminance(color);
     }
-    const average_luminance = sum_luminance / 8.0;
+    const average_luminance = sum_luminance / @as(f32, @floatFromInt(improved_colors.len));
     const dark_base = average_luminance < 128.0;
 
-    // Calculate background and foreground colors with high contrast
-    const darken_amount = if (dark_base) 0.825 + (average_luminance / 255.0) * 0.2 else 0.0;
-    const lighten_amount = if (dark_base) 0.0 else 0.7 + (1.0 - average_luminance / 255.0) * 0.25;
+    const selection = try color_utils.selectBackgroundAndForeground(allocator, improved_colors, dark_base);
+    defer allocator.free(selection.remaining_indices);
+
+    const c0 = improved_colors[selection.background_index];
+    const remaining = selection.remaining_indices;
+
+    var c1_raw = improved_colors[remaining[0]];
+    var c2_raw = improved_colors[remaining[1]];
+
+    const c3_raw = improved_colors[remaining[2]];
+    const c4_raw = improved_colors[remaining[3]];
+    const c5_raw = improved_colors[remaining[4]];
+    const c6_raw = improved_colors[remaining[5]];
+    const c7_raw = improved_colors[remaining[6]];
+
+    const base_luminance = color_utils.getLuminance(c0);
+    const darken_amount = if (dark_base) 0.8 + (base_luminance) * 0.20 else 0.0;
+    const lighten_amount = if (dark_base) 0.0 else 0.8 + (1.0 - base_luminance) * 0.20;
     const background = if (dark_base) color_utils.darkenColor(c0, darken_amount) else color_utils.lightenColor(c0, lighten_amount);
 
-    const proposed_foreground = if (dark_base) color_utils.lightenColor(c0, 0.7) else color_utils.darkenColor(c0, 0.8);
+    const proposed_foreground = improved_colors[selection.foreground_index];
     const foreground = color_utils.ensureReadableContrast(proposed_foreground, background, 7.0);
 
-    // Adjust accent colors for readability (WCAG AA)
-    var c1 = color_utils.adjustForContrast(c1_raw, background, 4.5, 10);
-    var c2 = color_utils.adjustForContrast(c2_raw, background, 4.5, 10);
-
-    // Ensure accent colors don't clash with foreground
-    if (color_utils.rgbDistance(c1, foreground) < 60) {
-        c1 = if (dark_base) color_utils.lightenColor(c1, 0.15) else color_utils.darkenColor(c1, 0.15);
+    if (color_utils.rgbDistance(c1_raw, foreground) < 60) {
+        c1_raw = if (dark_base) color_utils.darkenColor(c1_raw, 0.15) else color_utils.lightenColor(c1_raw, 0.15);
     }
-    if (color_utils.rgbDistance(c2, foreground) < 60) {
-        c2 = if (dark_base) color_utils.lightenColor(c2, 0.15) else color_utils.darkenColor(c2, 0.15);
+    if (color_utils.rgbDistance(c2_raw, foreground) < 60) {
+        c2_raw = if (dark_base) color_utils.darkenColor(c2_raw, 0.15) else color_utils.lightenColor(c2_raw, 0.15);
     }
-    if (color_utils.rgbDistance(c1, c2) < 50) {
-        c2 = if (dark_base) color_utils.lightenColor(c2, 0.15) else color_utils.darkenColor(c2, 0.15);
+    if (color_utils.rgbDistance(c1_raw, c2_raw) < 60) {
+        c2_raw = if (dark_base) color_utils.lightenColor(c2_raw, 0.15) else color_utils.darkenColor(c2_raw, 0.15);
     }
 
-    const c3 = color_utils.adjustForContrast(c3_raw, background, 3.5, 10);
-    const c4 = color_utils.adjustForContrast(c4_raw, background, 3.5, 10);
-    const c5 = color_utils.adjustForContrast(c5_raw, background, 3.5, 10);
-    const c6 = color_utils.adjustForContrast(c6_raw, background, 3.5, 10);
-    const c7 = color_utils.adjustForContrast(c7_raw, background, 3.5, 10);
+    const c1 = color_utils.adjustForContrast(c1_raw, background, 3.5);
+    const c2 = color_utils.adjustForContrast(c2_raw, background, 3.5);
+    const numbers_raw = color_utils.getHarmonicColor(c2, .complementary);
+    const numbers = color_utils.adjustForContrast(numbers_raw, background, 3.5);
 
-    // Precompute background variations for different UI elements
-    const bg_very_dark = if (dark_base) color_utils.darkenColor(c0, 0.95) else color_utils.lightenColor(c0, 0.95);
-    const bg_dark = if (dark_base) color_utils.darkenColor(c0, 0.92) else color_utils.lightenColor(c0, 0.92);
-    const bg_medium = if (dark_base) color_utils.darkenColor(c0, 0.9) else color_utils.lightenColor(c0, 0.9);
-    const bg_light = if (dark_base) color_utils.darkenColor(c0, 0.88) else color_utils.lightenColor(c0, 0.88);
-    const bg_lighter = if (dark_base) color_utils.darkenColor(c0, 0.85) else color_utils.lightenColor(c0, 0.85);
+    const c3 = color_utils.adjustForContrast(c3_raw, background, 3.5);
+    const c4 = color_utils.adjustForContrast(c4_raw, background, 3.5);
+    const c5 = color_utils.adjustForContrast(c5_raw, background, 3.5);
+    const c6 = color_utils.adjustForContrast(c6_raw, background, 3.5);
+    const c7 = color_utils.adjustForContrast(c7_raw, background, 3.5);
+
+    const bg_very_dark = if (dark_base) color_utils.darkenColor(c0, 0.80) else color_utils.lightenColor(c0, 0.80);
+    const bg_dark = if (dark_base) color_utils.darkenColor(c0, 0.75) else color_utils.lightenColor(c0, 0.75);
+    const bg_medium = if (dark_base) color_utils.darkenColor(c0, 0.70) else color_utils.lightenColor(c0, 0.70);
+    const bg_light = if (dark_base) color_utils.darkenColor(c0, 0.65) else color_utils.lightenColor(c0, 0.65);
+    const bg_lighter = if (dark_base) color_utils.darkenColor(c0, 0.60) else color_utils.lightenColor(c0, 0.60);
     const bg_inactive = if (dark_base) color_utils.darkenColor(c0, 0.97) else color_utils.lightenColor(c0, 0.97);
+    const c2_dark = if (dark_base) color_utils.darkenColor(c2, 0.8) else color_utils.lightenColor(c2, 0.8);
     const c3_dark = if (dark_base) color_utils.darkenColor(c3, 0.8) else color_utils.lightenColor(c3, 0.8);
     const c4_dark = if (dark_base) color_utils.darkenColor(c4, 0.8) else color_utils.lightenColor(c4, 0.8);
     const c5_dark = if (dark_base) color_utils.darkenColor(c5, 0.8) else color_utils.lightenColor(c5, 0.8);
-    const c2_dark = if (dark_base) color_utils.darkenColor(c2, 0.8) else color_utils.lightenColor(c2, 0.8);
     const button_fg = if (dark_base) background else color_utils.darkenColor(c0, 0.9);
 
-    // Precompute alpha-blended colors for overlays and subtle effects
+    const fg30 = color_utils.addAlpha(foreground, "30");
+    const fg50 = color_utils.addAlpha(foreground, "50");
     const fg60 = color_utils.addAlpha(foreground, "60");
     const fg70 = color_utils.addAlpha(foreground, "70");
-    const fg50 = color_utils.addAlpha(foreground, "50");
-    const fg30 = color_utils.addAlpha(foreground, "30");
     const fg99 = color_utils.addAlpha(foreground, "99");
-    const c1_40 = color_utils.addAlpha(c1, "40");
     const c1_20 = color_utils.addAlpha(c1, "20");
     const c1_30 = color_utils.addAlpha(c1, "30");
+    const c1_40 = color_utils.addAlpha(c1, "40");
     const c1_60 = color_utils.addAlpha(c1, "60");
     const c1_80 = color_utils.addAlpha(c1, "80");
     const c2_20 = color_utils.addAlpha(c2, "20");
@@ -323,7 +299,6 @@ pub fn generateVSCodeTheme(
         .@"settings.dropdownListBorder" = c1_40,
     };
 
-    // Token colors array
     var token_colors = [_]VSCodeTokenColor{
         .{
             .name = "Comment",
@@ -347,13 +322,13 @@ pub fn generateVSCodeTheme(
         },
         .{
             .name = "Number",
-            .scope = &[_][]const u8{ "constant.numeric", "constant.character", "number", "constant.other", "variable.other.constant", "support.constant", "entity.other.inherited-class", "support.class", "support.type" },
-            .settings = .{ .foreground = c5 },
+            .scope = &[_][]const u8{ "constant.numeric", "constant.character", "number" },
+            .settings = .{ .foreground = numbers },
         },
         .{
             .name = "Built-in constant",
-            .scope = &[_][]const u8{ "constant.language", "constant.language.boolean", "constant.language.null", "entity.name.class", "entity.name.type" },
-            .settings = .{ .foreground = c5, .fontStyle = "bold" },
+            .scope = &[_][]const u8{ "constant.language", "constant.language.boolean", "constant.language.null", "entity.name.class", "entity.name.type", "constant.other", "variable.other.constant", "support.constant", "entity.other.inherited-class", "support.class", "support.type" },
+            .settings = .{ .foreground = c5 },
         },
         .{
             .name = "Variable",
@@ -438,9 +413,6 @@ pub fn generateVSCodeTheme(
     };
 }
 
-/// Install theme as a local VS Code extension
-/// Creates the necessary directory structure and files in VS Code's local extensions folder
-/// Returns the installation path
 pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, theme_name: []const u8) ![]const u8 {
     const home_dir = std.process.getEnvVarOwned(allocator, "USERPROFILE") catch |err| blk: {
         if (err == error.EnvironmentVariableNotFound) {
