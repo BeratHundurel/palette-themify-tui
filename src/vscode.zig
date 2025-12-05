@@ -299,102 +299,82 @@ pub fn generateVSCodeTheme(
 
     var token_colors = [_]VSCodeTokenColor{
         .{
-            .name = "Comment",
             .scope = &[_][]const u8{ "comment", "punctuation.definition.comment" },
             .settings = .{ .foreground = fg60, .fontStyle = "italic" },
         },
         .{
-            .name = "Keyword",
             .scope = &[_][]const u8{ "keyword", "keyword.control", "keyword.operator.new", "keyword.operator.expression", "keyword.other" },
             .settings = .{ .foreground = c6, .fontStyle = "bold" },
         },
         .{
-            .name = "Storage",
             .scope = &[_][]const u8{ "storage", "storage.type", "storage.modifier", "entity.name.tag", "meta.tag" },
             .settings = .{ .foreground = c6 },
         },
         .{
-            .name = "String",
             .scope = &[_][]const u8{ "string", "string.quoted", "string.template", "string.regexp", "punctuation.definition.string", "support.constant.property-value", "support.constant.property-value.css", "markup.inline.raw", "markup.fenced_code", "markup.inserted" },
             .settings = .{ .foreground = c3 },
         },
         .{
-            .name = "Number",
             .scope = &[_][]const u8{ "constant.numeric", "constant.character", "number" },
             .settings = .{ .foreground = numbers },
         },
         .{
-            .name = "Built-in constant",
             .scope = &[_][]const u8{ "constant.language", "constant.language.boolean", "constant.language.null", "entity.name.class", "entity.name.type", "constant.other", "variable.other.constant", "support.constant", "entity.other.inherited-class", "support.class", "support.type" },
             .settings = .{ .foreground = c5 },
         },
         .{
-            .name = "Variable",
             .scope = &[_][]const u8{ "variable", "identifier", "variable.other.readwrite", "meta.definition.variable" },
             .settings = .{ .foreground = foreground },
         },
         .{
-            .name = "Property",
             .scope = &[_][]const u8{ "variable.other.property", "variable.other.object.property", "meta.object-literal.key", "support.variable", "support.other.variable", "support.type.property-name", "support.type.property-name.css" },
             .settings = .{ .foreground = c1 },
         },
         .{
-            .name = "Function",
             .scope = &[_][]const u8{ "entity.name.function", "meta.function-call", "meta.method-call", "meta.method", "entity.other.attribute-name", "entity.name.module", "support.module", "support.function", "support.node" },
             .settings = .{ .foreground = c2 },
         },
         .{
-            .name = "Parameter",
             .scope = &[_][]const u8{ "variable.parameter", "meta.parameter" },
             .settings = .{ .foreground = c7 },
         },
         .{
-            .name = "Brackets",
             .scope = &[_][]const u8{ "punctuation.definition.begin.bracket", "punctuation.definition.end.bracket", "punctuation.definition.begin.bracket.round", "punctuation.definition.end.bracket.round", "punctuation.definition.begin.bracket.square", "punctuation.definition.end.bracket.square", "punctuation.definition.begin.bracket.curly", "punctuation.definition.end.bracket.curly", "meta.brace", "punctuation.section.brackets", "punctuation.section.parens", "punctuation.section.braces" },
             .settings = .{ .foreground = fg_bracket_dark },
         },
         .{
-            .name = "Punctuation",
             .scope = &[_][]const u8{ "punctuation", "punctuation.terminator", "punctuation.separator", "punctuation.separator.comma", "punctuation.definition" },
             .settings = .{ .foreground = fg_punct_dark },
         },
         .{
-            .name = "Operator",
             .scope = &[_][]const u8{ "keyword.operator", "punctuation.operator" },
             .settings = .{ .foreground = if (dark_base) color_utils.lightenColor(c6, 0.05) else color_utils.darkenColor(c6, 0.05) },
         },
         .{
-            .name = "Heading",
             .scope = &[_][]const u8{ "markup.heading", "entity.name.section" },
             .settings = .{ .foreground = c2, .fontStyle = "bold" },
         },
         .{
-            .name = "Italic",
             .scope = &[_][]const u8{"markup.italic"},
             .settings = .{ .fontStyle = "italic" },
         },
         .{
-            .name = "Bold",
             .scope = &[_][]const u8{"markup.bold"},
             .settings = .{ .fontStyle = "bold" },
         },
         .{
-            .name = "Link",
             .scope = &[_][]const u8{ "markup.underline.link", "string.other.link" },
             .settings = .{ .foreground = c2, .fontStyle = "underline" },
         },
         .{
-            .name = "Deleted",
             .scope = &[_][]const u8{"markup.deleted"},
             .settings = .{ .foreground = c4 },
         },
         .{
-            .name = "Invalid",
             .scope = &[_][]const u8{ "invalid", "invalid.illegal" },
             .settings = .{ .foreground = c4, .fontStyle = "bold" },
         },
         .{
-            .name = "Deprecated",
             .scope = &[_][]const u8{"invalid.deprecated"},
             .settings = .{ .foreground = c4_80, .fontStyle = "italic" },
         },

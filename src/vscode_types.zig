@@ -1,34 +1,6 @@
 const std = @import("std");
 
-// HSL color space representation (normalized 0.0 to 1.0)
-pub const HSL = struct {
-    h: f32,
-    s: f32,
-    l: f32,
-};
-
-pub const RGB = struct {
-    r: u8,
-    g: u8,
-    b: u8,
-};
-
-// LAB color space for perceptual color calculations
-pub const LAB = struct {
-    l: f32, // Lightness: 0 to 100
-    a: f32, // Green-Red: -128 to 127
-    b: f32, // Blue-Yellow: -128 to 127
-};
-
-// Color harmony schemes based on color wheel relationships
-pub const HarmonyScheme = enum {
-    complementary,
-    triadic,
-    analogous,
-    @"split-complementary",
-};
-
-// Token styling settings for syntax highlighting
+/// Token styling settings for syntax highlighting
 pub const VSCodeTokenSettings = struct {
     foreground: ?[]const u8 = null,
     background: ?[]const u8 = null,
@@ -36,7 +8,6 @@ pub const VSCodeTokenSettings = struct {
 };
 
 pub const VSCodeTokenColor = struct {
-    name: ?[]const u8 = null,
     scope: []const []const u8,
     settings: VSCodeTokenSettings,
 };

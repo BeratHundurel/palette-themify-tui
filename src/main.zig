@@ -720,7 +720,7 @@ const PaletteThemify = struct {
 
         std.mem.sort(ColorAndCount, color_map.items, {}, ColorAndCount.lessThan);
 
-        const num_colors = @min(18, color_map.items.len);
+        const num_colors = @min(20, color_map.items.len);
         self.colors = try self.allocator.alloc(zigimg.color.Colorf32, num_colors);
 
         for (0..num_colors) |i| {
@@ -808,7 +808,7 @@ const PaletteThemify = struct {
 };
 
 pub fn main() !void {
-    var gpa = std.heap.DebugAllocator(.{}){};
+    var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer {
         const deinit_status = gpa.deinit();
         if (deinit_status == .leak) {

@@ -1,10 +1,33 @@
 const std = @import("std");
 const types = @import("vscode_types.zig");
 
-pub const RGB = types.RGB;
-pub const HSL = types.HSL;
-pub const LAB = types.LAB;
-pub const HarmonyScheme = types.HarmonyScheme;
+/// HSL color space representation (normalized 0.0 to 1.0)
+pub const HSL = struct {
+    h: f32,
+    s: f32,
+    l: f32,
+};
+
+pub const RGB = struct {
+    r: u8,
+    g: u8,
+    b: u8,
+};
+
+/// LAB color space for perceptual color calculations
+pub const LAB = struct {
+    l: f32,
+    a: f32,
+    b: f32,
+};
+
+/// Color harmony schemes based on color wheel relationships
+pub const HarmonyScheme = enum {
+    complementary,
+    triadic,
+    analogous,
+    @"split-complementary",
+};
 
 pub const BackgroundForegroundSelection = struct {
     background_index: usize,
@@ -177,13 +200,13 @@ pub fn adjustForContrast(fg: []const u8, bg: []const u8, min_contrast: f32) []co
     const hsl = hexToHsl(color);
     if (dark_bg) {
         if (hsl.s > 0.6 and hsl.l > 0.55) {
-            const new_l = 0.45 + (hsl.l - 0.55) * 0.2;
-            const new_s = @min(hsl.s, 0.70);
+            const new_l = 0.48 + (hsl.l - 0.55) * 0.3;
+            const new_s = @min(hsl.s, 0.75);
             const rgb = hslToRgb(hsl.h, new_s, new_l);
             color = rgbToHex(rgb.r, rgb.g, rgb.b);
         } else if (hsl.s > 0.75 and hsl.l > 0.45) {
-            const new_l = hsl.l * 0.9;
-            const new_s = hsl.s * 0.8;
+            const new_l = hsl.l * 0.92;
+            const new_s = hsl.s * 0.85;
             const rgb = hslToRgb(hsl.h, new_s, new_l);
             color = rgbToHex(rgb.r, rgb.g, rgb.b);
         }
@@ -337,7 +360,7 @@ pub fn selectDiverseColors(allocator: std.mem.Allocator, colors: []const []const
     try selected.append(allocator, colors[best_start_idx]);
 
     var safety_counter: usize = 0;
-    const max_iterations = count * colors.len;
+    const max_iterations = 256;
 
     while (selected.items.len < count and safety_counter < max_iterations) : (safety_counter += 1) {
         var max_min_distance: f32 = 0.0;
