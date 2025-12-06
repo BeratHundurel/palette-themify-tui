@@ -13,6 +13,7 @@ pub fn generateVSCodeTheme(
     allocator: std.mem.Allocator,
     colors: []const []const u8,
 ) !VSCodeTheme {
+    const semantic = color_utils.findSemanticColors(colors);
     const improved_colors = try color_utils.selectDiverseColors(allocator, colors, 9);
     defer allocator.free(improved_colors);
 
@@ -63,10 +64,15 @@ pub fn generateVSCodeTheme(
     const c6 = color_utils.adjustForContrast(c6_raw, background, 3.5);
     const c7 = color_utils.adjustForContrast(c7_raw, background, 3.5);
 
-    const c2_dark = if (dark_base) color_utils.darkenColor(c2, 0.8) else color_utils.lightenColor(c2, 0.8);
+    const semantic_error = color_utils.adjustForContrast(semantic.error_color, background, 3.5);
+    const semantic_warning = color_utils.adjustForContrast(semantic.warning_color, background, 3.5);
+    const semantic_success = color_utils.adjustForContrast(semantic.success_color, background, 3.5);
+    const semantic_info = color_utils.adjustForContrast(semantic.info_color, background, 3.5);
+
     const c3_dark = if (dark_base) color_utils.darkenColor(c3, 0.8) else color_utils.lightenColor(c3, 0.8);
-    const c4_dark = if (dark_base) color_utils.darkenColor(c4, 0.8) else color_utils.lightenColor(c4, 0.8);
-    const c5_dark = if (dark_base) color_utils.darkenColor(c5, 0.8) else color_utils.lightenColor(c5, 0.8);
+    const semantic_error_dark = if (dark_base) color_utils.darkenColor(semantic_error, 0.8) else color_utils.lightenColor(semantic_error, 0.8);
+    const semantic_warning_dark = if (dark_base) color_utils.darkenColor(semantic_warning, 0.8) else color_utils.lightenColor(semantic_warning, 0.8);
+    const semantic_info_dark = if (dark_base) color_utils.darkenColor(semantic_info, 0.8) else color_utils.lightenColor(semantic_info, 0.8);
     const button_fg = if (dark_base) background else color_utils.darkenColor(c0, 0.9);
 
     const fg30 = color_utils.addAlpha(foreground, "30");
@@ -141,18 +147,18 @@ pub fn generateVSCodeTheme(
         .@"panelTitle.activeBorder" = c2,
         .@"terminal.foreground" = foreground,
         .@"terminal.ansiBlack" = if (dark_base) color_utils.darkenColor(c0, 0.9) else color_utils.darkenColor(c0, 0.2),
-        .@"terminal.ansiRed" = c4,
-        .@"terminal.ansiGreen" = c3,
-        .@"terminal.ansiYellow" = c5,
-        .@"terminal.ansiBlue" = c2,
+        .@"terminal.ansiRed" = semantic_error,
+        .@"terminal.ansiGreen" = semantic_success,
+        .@"terminal.ansiYellow" = semantic_warning,
+        .@"terminal.ansiBlue" = semantic_info,
         .@"terminal.ansiMagenta" = c6,
         .@"terminal.ansiCyan" = c7,
         .@"terminal.ansiWhite" = foreground,
         .@"terminal.ansiBrightBlack" = if (dark_base) color_utils.darkenColor(foreground, 0.3) else color_utils.lightenColor(foreground, 0.3),
-        .@"terminal.ansiBrightRed" = if (dark_base) color_utils.lightenColor(c4, 0.2) else color_utils.darkenColor(c4, 0.2),
-        .@"terminal.ansiBrightGreen" = if (dark_base) color_utils.lightenColor(c3, 0.2) else color_utils.darkenColor(c3, 0.2),
-        .@"terminal.ansiBrightYellow" = if (dark_base) color_utils.lightenColor(c5, 0.2) else color_utils.darkenColor(c5, 0.2),
-        .@"terminal.ansiBrightBlue" = if (dark_base) color_utils.lightenColor(c2, 0.2) else color_utils.darkenColor(c2, 0.2),
+        .@"terminal.ansiBrightRed" = if (dark_base) color_utils.lightenColor(semantic_error, 0.2) else color_utils.darkenColor(semantic_error, 0.2),
+        .@"terminal.ansiBrightGreen" = if (dark_base) color_utils.lightenColor(semantic_success, 0.2) else color_utils.darkenColor(semantic_success, 0.2),
+        .@"terminal.ansiBrightYellow" = if (dark_base) color_utils.lightenColor(semantic_warning, 0.2) else color_utils.darkenColor(semantic_warning, 0.2),
+        .@"terminal.ansiBrightBlue" = if (dark_base) color_utils.lightenColor(semantic_info, 0.2) else color_utils.darkenColor(semantic_info, 0.2),
         .@"terminal.ansiBrightMagenta" = if (dark_base) color_utils.lightenColor(c6, 0.2) else color_utils.darkenColor(c6, 0.2),
         .@"terminal.ansiBrightCyan" = if (dark_base) color_utils.lightenColor(c7, 0.2) else color_utils.darkenColor(c7, 0.2),
         .@"terminal.ansiBrightWhite" = if (dark_base) color_utils.lightenColor(foreground, 0.2) else color_utils.darkenColor(foreground, 0.2),
@@ -163,14 +169,14 @@ pub fn generateVSCodeTheme(
         .@"inputOption.activeBorder" = c2,
         .@"inputOption.activeBackground" = c2_30,
         .@"inputOption.activeForeground" = foreground,
-        .@"inputValidation.errorBackground" = c4_dark,
-        .@"inputValidation.errorBorder" = c4,
+        .@"inputValidation.errorBackground" = semantic_error_dark,
+        .@"inputValidation.errorBorder" = semantic_error,
         .@"inputValidation.errorForeground" = foreground,
-        .@"inputValidation.warningBackground" = c5_dark,
-        .@"inputValidation.warningBorder" = c5,
+        .@"inputValidation.warningBackground" = semantic_warning_dark,
+        .@"inputValidation.warningBorder" = semantic_warning,
         .@"inputValidation.warningForeground" = foreground,
-        .@"inputValidation.infoBackground" = c2_dark,
-        .@"inputValidation.infoBorder" = c2,
+        .@"inputValidation.infoBackground" = semantic_info_dark,
+        .@"inputValidation.infoBorder" = semantic_info,
         .@"inputValidation.infoForeground" = foreground,
         .@"dropdown.background" = bg_light,
         .@"dropdown.foreground" = foreground,
@@ -187,6 +193,9 @@ pub fn generateVSCodeTheme(
         .@"list.inactiveSelectionBackground" = c1_30,
         .@"list.hoverBackground" = c1_20,
         .@"list.focusBackground" = c2_30,
+        .@"list.highlightForeground" = c2,
+        .@"pickerGroup.foreground" = c6,
+        .@"pickerGroup.border" = c1_60,
         .@"button.background" = c2,
         .@"button.foreground" = button_fg,
         .@"button.hoverBackground" = if (dark_base) color_utils.lightenColor(c2, 0.1) else color_utils.darkenColor(c2, 0.1),
@@ -247,15 +256,15 @@ pub fn generateVSCodeTheme(
         .@"editorHoverWidget.border" = c1_40,
         .@"editorHoverWidget.highlightForeground" = c2,
         .@"editorHoverWidget.statusBarBackground" = bg_dark,
-        .@"editorError.foreground" = c4,
-        .@"editorWarning.foreground" = c5,
-        .@"editorInfo.foreground" = c2,
-        .@"editorGutter.addedBackground" = c3,
-        .@"editorGutter.modifiedBackground" = c5,
-        .@"editorGutter.deletedBackground" = c4,
-        .@"gitDecoration.addedResourceForeground" = c3,
-        .@"gitDecoration.modifiedResourceForeground" = c5,
-        .@"gitDecoration.deletedResourceForeground" = c4,
+        .@"editorError.foreground" = semantic_error,
+        .@"editorWarning.foreground" = semantic_warning,
+        .@"editorInfo.foreground" = semantic_info,
+        .@"editorGutter.addedBackground" = semantic_success,
+        .@"editorGutter.modifiedBackground" = semantic_warning,
+        .@"editorGutter.deletedBackground" = semantic_error,
+        .@"gitDecoration.addedResourceForeground" = semantic_success,
+        .@"gitDecoration.modifiedResourceForeground" = semantic_warning,
+        .@"gitDecoration.deletedResourceForeground" = semantic_error,
         .@"gitDecoration.untrackedResourceForeground" = c7,
         .@"gitDecoration.ignoredResourceForeground" = fg60,
         .@"peekView.border" = c2,

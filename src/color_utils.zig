@@ -35,6 +35,66 @@ pub const BackgroundForegroundSelection = struct {
     remaining_indices: []usize,
 };
 
+pub const SemanticColors = struct {
+    error_color: []const u8,
+    warning_color: []const u8,
+    success_color: []const u8,
+    info_color: []const u8,
+};
+
+pub fn findSemanticColors(colors: []const []const u8) SemanticColors {
+    const target_red = RGB{ .r = 220, .g = 60, .b = 60 };
+    const target_orange = RGB{ .r = 230, .g = 160, .b = 50 };
+    const target_green = RGB{ .r = 80, .g = 180, .b = 80 };
+    const target_blue = RGB{ .r = 80, .g = 160, .b = 220 };
+
+    var best_red: []const u8 = colors[0];
+    var best_orange: []const u8 = colors[0];
+    var best_green: []const u8 = colors[0];
+    var best_blue: []const u8 = colors[0];
+
+    var min_red_dist: f32 = std.math.floatMax(f32);
+    var min_orange_dist: f32 = std.math.floatMax(f32);
+    var min_green_dist: f32 = std.math.floatMax(f32);
+    var min_blue_dist: f32 = std.math.floatMax(f32);
+
+    for (colors) |color| {
+        const rgb = parseHexToRgb(color);
+        const hsl = hexToHsl(color);
+
+        if (hsl.s < 0.2 or hsl.l < 0.15 or hsl.l > 0.85) continue;
+
+        const red_dist = rgbDistanceFromRgb(rgb, target_red);
+        const orange_dist = rgbDistanceFromRgb(rgb, target_orange);
+        const green_dist = rgbDistanceFromRgb(rgb, target_green);
+        const blue_dist = rgbDistanceFromRgb(rgb, target_blue);
+
+        if (red_dist < min_red_dist) {
+            min_red_dist = red_dist;
+            best_red = color;
+        }
+        if (orange_dist < min_orange_dist) {
+            min_orange_dist = orange_dist;
+            best_orange = color;
+        }
+        if (green_dist < min_green_dist) {
+            min_green_dist = green_dist;
+            best_green = color;
+        }
+        if (blue_dist < min_blue_dist) {
+            min_blue_dist = blue_dist;
+            best_blue = color;
+        }
+    }
+
+    return SemanticColors{
+        .error_color = best_red,
+        .warning_color = best_orange,
+        .success_color = best_green,
+        .info_color = best_blue,
+    };
+}
+
 inline fn parseHexToRgb(hex: []const u8) RGB {
     const r = std.fmt.parseInt(u8, hex[1..3], 16) catch 0;
     const g = std.fmt.parseInt(u8, hex[3..5], 16) catch 0;
