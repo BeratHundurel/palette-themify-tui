@@ -28,10 +28,8 @@ pub fn generateVSCodeTheme(
 
     const c0 = improved_colors[selection.background_index];
     const remaining = selection.remaining_indices;
-
-    var c1_raw = improved_colors[remaining[0]];
-    var c2_raw = improved_colors[remaining[1]];
-
+    const c1_raw = improved_colors[remaining[0]];
+    const c2_raw = improved_colors[remaining[1]];
     const c3_raw = improved_colors[remaining[2]];
     const c4_raw = improved_colors[remaining[3]];
     const c5_raw = improved_colors[remaining[4]];
@@ -39,25 +37,23 @@ pub fn generateVSCodeTheme(
     const c7_raw = improved_colors[remaining[6]];
 
     const base_luminance = color_utils.getLuminance(c0);
-    const darken_amount = if (dark_base) 0.8 + (base_luminance) * 0.20 else 0.0;
-    const lighten_amount = if (dark_base) 0.0 else 0.8 + (1.0 - base_luminance) * 0.20;
+    const darken_amount = if (dark_base) 0.75 + (base_luminance) * 0.20 else 0.0;
+    const lighten_amount = if (dark_base) 0.0 else 0.75 + (1.0 - base_luminance) * 0.20;
     const background = if (dark_base) color_utils.darkenColor(c0, darken_amount) else color_utils.lightenColor(c0, lighten_amount);
 
     const proposed_foreground = improved_colors[selection.foreground_index];
     const foreground = color_utils.ensureReadableContrast(proposed_foreground, background, 7.0);
 
-    if (color_utils.rgbDistance(c1_raw, foreground) < 60) {
-        c1_raw = if (dark_base) color_utils.darkenColor(c1_raw, 0.15) else color_utils.lightenColor(c1_raw, 0.15);
-    }
-    if (color_utils.rgbDistance(c2_raw, foreground) < 60) {
-        c2_raw = if (dark_base) color_utils.darkenColor(c2_raw, 0.15) else color_utils.lightenColor(c2_raw, 0.15);
-    }
-    if (color_utils.rgbDistance(c1_raw, c2_raw) < 60) {
-        c2_raw = if (dark_base) color_utils.lightenColor(c2_raw, 0.15) else color_utils.darkenColor(c2_raw, 0.15);
-    }
+    const bg_very_dark = if (dark_base) color_utils.darkenColor(background, 0.20) else color_utils.lightenColor(background, 0.20);
+    const bg_dark = if (dark_base) color_utils.darkenColor(background, 0.15) else color_utils.lightenColor(background, 0.15);
+    const bg_medium = if (dark_base) color_utils.darkenColor(background, 0.10) else color_utils.lightenColor(background, 0.10);
+    const bg_light = if (dark_base) color_utils.lightenColor(background, 0.05) else color_utils.darkenColor(background, 0.05);
+    const bg_lighter = if (dark_base) color_utils.lightenColor(background, 0.10) else color_utils.darkenColor(background, 0.10);
+    const bg_inactive = if (dark_base) color_utils.darkenColor(background, 0.50) else color_utils.lightenColor(background, 0.50);
 
-    const c1 = color_utils.adjustForContrast(c1_raw, background, 3.5);
+    const c1 = color_utils.adjustForContrast(c1_raw, bg_very_dark, 4.5);
     const c2 = color_utils.adjustForContrast(c2_raw, background, 3.5);
+
     const numbers_raw = color_utils.getHarmonicColor(c2, .complementary);
     const numbers = color_utils.adjustForContrast(numbers_raw, background, 3.5);
 
@@ -67,12 +63,6 @@ pub fn generateVSCodeTheme(
     const c6 = color_utils.adjustForContrast(c6_raw, background, 3.5);
     const c7 = color_utils.adjustForContrast(c7_raw, background, 3.5);
 
-    const bg_very_dark = if (dark_base) color_utils.darkenColor(c0, 0.80) else color_utils.lightenColor(c0, 0.80);
-    const bg_dark = if (dark_base) color_utils.darkenColor(c0, 0.75) else color_utils.lightenColor(c0, 0.75);
-    const bg_medium = if (dark_base) color_utils.darkenColor(c0, 0.70) else color_utils.lightenColor(c0, 0.70);
-    const bg_light = if (dark_base) color_utils.darkenColor(c0, 0.65) else color_utils.lightenColor(c0, 0.65);
-    const bg_lighter = if (dark_base) color_utils.darkenColor(c0, 0.60) else color_utils.lightenColor(c0, 0.60);
-    const bg_inactive = if (dark_base) color_utils.darkenColor(c0, 0.97) else color_utils.lightenColor(c0, 0.97);
     const c2_dark = if (dark_base) color_utils.darkenColor(c2, 0.8) else color_utils.lightenColor(c2, 0.8);
     const c3_dark = if (dark_base) color_utils.darkenColor(c3, 0.8) else color_utils.lightenColor(c3, 0.8);
     const c4_dark = if (dark_base) color_utils.darkenColor(c4, 0.8) else color_utils.lightenColor(c4, 0.8);
@@ -315,11 +305,11 @@ pub fn generateVSCodeTheme(
             .settings = .{ .foreground = c3 },
         },
         .{
-            .scope = &[_][]const u8{ "constant.numeric", "constant.character", "number" },
+            .scope = &[_][]const u8{ "constant.numeric", "constant.character", "number", "constant.language.boolean", "constant.language.null" },
             .settings = .{ .foreground = numbers },
         },
         .{
-            .scope = &[_][]const u8{ "constant.language", "constant.language.boolean", "constant.language.null", "entity.name.class", "entity.name.type", "constant.other", "variable.other.constant", "support.constant", "entity.other.inherited-class", "support.class", "support.type" },
+            .scope = &[_][]const u8{ "constant.language", "constant.other", "entity.name.class", "entity.other.inherited-class", "entity.name.type", "variable.other.constant", "support.constant", "support.class", "support.type" },
             .settings = .{ .foreground = c5 },
         },
         .{
