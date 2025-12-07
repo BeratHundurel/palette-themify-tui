@@ -52,8 +52,9 @@ pub fn generateVSCodeTheme(
     const bg_lighter = if (dark_base) color_utils.lightenColor(background, 0.10) else color_utils.darkenColor(background, 0.10);
     const bg_inactive = if (dark_base) color_utils.darkenColor(background, 0.50) else color_utils.lightenColor(background, 0.50);
 
-    const c1 = color_utils.adjustForContrast(c1_raw, bg_very_dark, 4.5);
-    const c2 = color_utils.adjustForContrast(c2_raw, background, 3.5);
+    // These are more often used against very dark backgrounds, so adjust accordingly
+    const c1 = color_utils.adjustForContrast(c1_raw, bg_very_dark, 3.5);
+    const c2 = color_utils.adjustForContrast(c2_raw, bg_very_dark, 3.5);
 
     const numbers_raw = color_utils.getHarmonicColor(c2, .complementary);
     const numbers = color_utils.adjustForContrast(numbers_raw, background, 3.5);
@@ -114,19 +115,19 @@ pub fn generateVSCodeTheme(
         .focusBorder = c2_60,
         .descriptionForeground = fg70,
         .errorForeground = c4,
-        .@"icon.foreground" = c1,
+        .@"icon.foreground" = foreground,
         .@"widget.border" = c1_40,
         .@"selection.background" = c2_50,
         .@"sash.hoverBorder" = c2,
         .@"activityBar.background" = bg_very_dark,
-        .@"activityBar.foreground" = c1,
+        .@"activityBar.foreground" = foreground,
         .@"activityBar.activeBorder" = c2,
         .@"activityBarBadge.background" = c2,
         .@"activityBarBadge.foreground" = foreground,
         .@"sideBar.background" = bg_dark,
         .@"sideBar.foreground" = foreground,
         .@"sideBar.border" = c1_20,
-        .@"sideBarTitle.foreground" = c1,
+        .@"sideBarTitle.foreground" = foreground,
         .@"statusBar.background" = bg_very_dark,
         .@"statusBar.foreground" = foreground,
         .@"statusBar.noFolderBackground" = c3_dark,
@@ -291,9 +292,18 @@ pub fn generateVSCodeTheme(
         .@"settings.checkboxForeground" = c5,
         .@"settings.checkboxBorder" = c1_40,
         .@"settings.dropdownBackground" = background,
-        .@"settings.dropdownForeground" = c1,
+        .@"settings.dropdownForeground" = foreground,
         .@"settings.dropdownBorder" = c1_40,
         .@"settings.dropdownListBorder" = c1_40,
+        .@"textLink.foreground" = c2,
+        .@"textLink.activeForeground" = if (dark_base) color_utils.lightenColor(c2, 0.15) else color_utils.darkenColor(c2, 0.15),
+        .@"textBlockQuote.background" = bg_dark,
+        .@"textBlockQuote.border" = c1_40,
+        .@"textCodeBlock.background" = bg_dark,
+        .@"textPreformat.foreground" = c5,
+        .@"textSeparator.foreground" = fg50,
+        .@"walkThrough.embeddedEditorBackground" = bg_very_dark,
+        .@"welcomePage.background" = background,
     };
 
     var token_colors = [_]VSCodeTokenColor{

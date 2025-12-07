@@ -200,6 +200,15 @@ pub const VSCodeThemeColors = struct {
     @"settings.dropdownForeground": []const u8,
     @"settings.dropdownBorder": []const u8,
     @"settings.dropdownListBorder": []const u8,
+    @"textLink.foreground": []const u8,
+    @"textLink.activeForeground": []const u8,
+    @"textBlockQuote.background": []const u8,
+    @"textBlockQuote.border": []const u8,
+    @"textCodeBlock.background": []const u8,
+    @"textPreformat.foreground": []const u8,
+    @"textSeparator.foreground": []const u8,
+    @"walkThrough.embeddedEditorBackground": []const u8,
+    @"welcomePage.background": []const u8,
 };
 
 pub const ThemeType = enum {
