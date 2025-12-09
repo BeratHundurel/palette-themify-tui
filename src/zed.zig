@@ -50,8 +50,8 @@ pub fn generateZedTheme(
     const background = if (dark_base) color_utils.darkenColor(c0, darken_amount) else color_utils.lightenColor(c0, lighten_amount);
     const bg_very_dark = if (dark_base) color_utils.darkenColor(background, 0.20) else color_utils.lightenColor(background, 0.20);
     const bg_dark = if (dark_base) color_utils.darkenColor(background, 0.15) else color_utils.lightenColor(background, 0.15);
-    const bg_light = if (dark_base) color_utils.lightenColor(background, 0.05) else color_utils.darkenColor(background, 0.05);
-    const bg_lighter = if (dark_base) color_utils.lightenColor(background, 0.10) else color_utils.darkenColor(background, 0.10);
+    const bg_light = if (dark_base) color_utils.lightenColor(background, 0.10) else color_utils.darkenColor(background, 0.05);
+    const bg_lighter = if (dark_base) color_utils.lightenColor(background, 0.20) else color_utils.darkenColor(background, 0.10);
 
     const proposed_foreground = improved_colors[selection.foreground_index];
     const foreground = color_utils.ensureReadableContrast(proposed_foreground, background, 7.0);
@@ -98,7 +98,6 @@ pub fn generateZedTheme(
     const semantic_success_26 = color_utils.addAlpha(semantic_success, "26");
     const semantic_success_1f = color_utils.addAlpha(semantic_success, "1f");
     const semantic_success_88 = color_utils.addAlpha(semantic_success, "88");
-    const semantic_info_33 = color_utils.addAlpha(semantic_info, "33");
 
     const accent_bright = if (dark_base) color_utils.lightenColor(c2, 0.33) else color_utils.darkenColor(c2, 0.33);
 
@@ -156,9 +155,9 @@ pub fn generateZedTheme(
         .@"drop_target.background" = color_utils.addAlpha(bg_lighter, "66"),
 
         .@"ghost_element.background" = "#00000000",
-        .@"ghost_element.hover" = color_utils.addAlpha(bg_light, "4d"),
-        .@"ghost_element.active" = color_utils.addAlpha(bg_lighter, "99"),
-        .@"ghost_element.selected" = color_utils.addAlpha(fg_muted, "66"),
+        .@"ghost_element.hover" = bg_light,
+        .@"ghost_element.active" = bg_lighter,
+        .@"ghost_element.selected" = fg_muted,
         .@"ghost_element.disabled" = fg_disabled,
 
         .text = foreground,
@@ -284,7 +283,7 @@ pub fn generateZedTheme(
         .@"renamed.background" = color_utils.addAlpha(semantic_info, "26"),
         .info = semantic_info,
         .@"info.border" = semantic_info,
-        .@"info.background" = semantic_info_33,
+        .@"info.background" = bg_light,
         .warning = semantic_warning,
         .@"warning.border" = semantic_warning,
         .@"warning.background" = semantic_warning_1f,
