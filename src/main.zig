@@ -125,6 +125,7 @@ const PaletteThemify = struct {
         try self.vx.enterAltScreen(self.tty.writer());
         try self.vx.queryTerminal(self.tty.writer(), 1 * std.time.ns_per_s);
         try self.vx.setMouseMode(self.tty.writer(), true);
+        try self.vx.setBracketedPaste(self.tty.writer(), true);
 
         while (!self.should_quit) {
             loop.pollEvent();
@@ -229,7 +230,7 @@ const PaletteThemify = struct {
                         }
                     } else if (key.matches(vaxis.Key.enter, .{})) {
                         const selected_option = theming_options[self.selected_option_index];
-                        if (std.mem.eql(u8, selected_option.name, "VSCode")) {
+                        if (std.mem.eql(u8, selected_option.name, "VSCode") or std.mem.eql(u8, selected_option.name, "Zed")) {
                             self.current_state = .theme_name_input;
                             if (self.status_message) |old_msg| {
                                 self.allocator.free(old_msg);
@@ -276,6 +277,13 @@ const PaletteThemify = struct {
                     };
                 } else {
                     try self.text_input.update(.{ .key_press = key });
+                }
+            },
+            .paste => |pasted_text| {
+                if (self.current_state == .theme_name_input) {
+                    try self.theme_name_input.insertSliceAtCursor(pasted_text);
+                } else if (self.current_state == .image_input) {
+                    try self.text_input.insertSliceAtCursor(pasted_text);
                 }
             },
             .mouse => |mouse| {
@@ -743,59 +751,59 @@ const PaletteThemify = struct {
             self.status_message = null;
         }
 
-        if (std.mem.eql(u8, selected_option.name, "VSCode")) {
-            if (self.colors) |colors| {
-                self.status_message = try std.fmt.allocPrint(
-                    self.allocator,
-                    "Generating VS Code theme...",
-                    .{},
-                );
-                self.status_is_error = false;
+        if (self.colors == null) {
+            self.status_message = try std.fmt.allocPrint(
+                self.allocator,
+                "No colors available. Please load an image first.",
+                .{},
+            );
+            self.status_is_error = true;
+            return;
+        }
 
-                var hex_colors = try self.allocator.alloc([]const u8, colors.len);
-                defer {
-                    for (hex_colors) |hex| {
-                        self.allocator.free(hex);
-                    }
-                    self.allocator.free(hex_colors);
-                }
+        const colors = self.colors.?;
 
-                for (colors, 0..) |color, i| {
-                    hex_colors[i] = try color_utils.colorf32ToHex(self.allocator, color.r, color.g, color.b);
-                }
-
-                const theme = try palette_themify.vscode.generateVSCodeTheme(
-                    self.allocator,
-                    hex_colors,
-                );
-                defer {
-                    self.allocator.free(theme.tokenColors);
-                }
-
-                const install_path = try palette_themify.vscode.installThemeToVSCode(
-                    self.allocator,
-                    theme,
-                    theme_name,
-                );
-                defer self.allocator.free(install_path);
-
-                if (self.status_message) |old_msg| {
-                    self.allocator.free(old_msg);
-                }
-                self.status_message = try std.fmt.allocPrint(
-                    self.allocator,
-                    "✓ Theme installed to: {s}",
-                    .{install_path},
-                );
-                self.status_is_error = false;
-            } else {
-                self.status_message = try std.fmt.allocPrint(
-                    self.allocator,
-                    "No colors available. Please load an image first.",
-                    .{},
-                );
-                self.status_is_error = true;
+        var hex_colors = try self.allocator.alloc([]const u8, colors.len);
+        defer {
+            for (hex_colors) |hex| {
+                self.allocator.free(hex);
             }
+            self.allocator.free(hex_colors);
+        }
+
+        for (colors, 0..) |color, i| {
+            hex_colors[i] = try color_utils.colorf32ToHex(self.allocator, color.r, color.g, color.b);
+        }
+
+        const install_path: []const u8 = if (std.mem.eql(u8, selected_option.name, "VSCode")) vscode_blk: {
+            const theme = try palette_themify.vscode.generateVSCodeTheme(
+                self.allocator,
+                hex_colors,
+            );
+            defer self.allocator.free(theme.tokenColors);
+
+            break :vscode_blk try palette_themify.vscode.installThemeToVSCode(
+                self.allocator,
+                theme,
+                theme_name,
+            );
+        } else if (std.mem.eql(u8, selected_option.name, "Zed")) zed_blk: {
+            const theme = try palette_themify.zed.generateZedTheme(
+                self.allocator,
+                hex_colors,
+                theme_name,
+            );
+            defer {
+                self.allocator.free(theme.themes[0].style.accents);
+                self.allocator.free(theme.themes[0].style.players);
+                self.allocator.free(theme.themes);
+            }
+
+            break :zed_blk try palette_themify.zed.installThemeToZed(
+                self.allocator,
+                theme,
+                theme_name,
+            );
         } else {
             self.status_message = try std.fmt.allocPrint(
                 self.allocator,
@@ -803,7 +811,16 @@ const PaletteThemify = struct {
                 .{selected_option.name},
             );
             self.status_is_error = true;
-        }
+            return;
+        };
+        defer self.allocator.free(install_path);
+
+        self.status_message = try std.fmt.allocPrint(
+            self.allocator,
+            "✓ Theme installed to: {s}",
+            .{install_path},
+        );
+        self.status_is_error = false;
     }
 };
 

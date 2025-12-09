@@ -14,7 +14,7 @@ pub fn generateVSCodeTheme(
     colors: []const []const u8,
 ) !VSCodeTheme {
     const semantic = color_utils.findSemanticColors(colors);
-    const improved_colors = try color_utils.selectDiverseColors(allocator, colors, 9);
+    const improved_colors = try color_utils.selectDiverseColors(allocator, colors, 10);
     defer allocator.free(improved_colors);
 
     var sum_luminance: f32 = 0.0;
@@ -36,6 +36,7 @@ pub fn generateVSCodeTheme(
     const c5_raw = improved_colors[remaining[4]];
     const c6_raw = improved_colors[remaining[5]];
     const c7_raw = improved_colors[remaining[6]];
+    const c8_raw = improved_colors[remaining[7]];
 
     const base_luminance = color_utils.getLuminance(c0);
     const darken_amount = if (dark_base) 0.75 + (base_luminance) * 0.20 else 0.0;
@@ -64,6 +65,7 @@ pub fn generateVSCodeTheme(
     const c5 = color_utils.adjustForContrast(c5_raw, background, 3.5);
     const c6 = color_utils.adjustForContrast(c6_raw, background, 3.5);
     const c7 = color_utils.adjustForContrast(c7_raw, background, 3.5);
+    const c8 = color_utils.adjustForContrast(c8_raw, background, 3.5);
 
     const semantic_error = color_utils.adjustForContrast(semantic.error_color, background, 3.5);
     const semantic_warning = color_utils.adjustForContrast(semantic.warning_color, background, 3.5);
@@ -324,7 +326,7 @@ pub fn generateVSCodeTheme(
             .settings = .{ .foreground = c3 },
         },
         .{
-            .scope = &[_][]const u8{ "constant.numeric", "constant.character", "number", "constant.language.boolean", "constant.language.null" },
+            .scope = &[_][]const u8{ "constant.numeric", "constant.character", "constant.language.boolean", "constant.language.null", "number" },
             .settings = .{ .foreground = numbers },
         },
         .{
@@ -357,7 +359,7 @@ pub fn generateVSCodeTheme(
         },
         .{
             .scope = &[_][]const u8{ "keyword.operator", "punctuation.operator" },
-            .settings = .{ .foreground = if (dark_base) color_utils.lightenColor(c6, 0.05) else color_utils.darkenColor(c6, 0.05) },
+            .settings = .{ .foreground = c8 },
         },
         .{
             .scope = &[_][]const u8{ "markup.heading", "entity.name.section" },
