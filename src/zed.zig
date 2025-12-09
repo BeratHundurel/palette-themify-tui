@@ -272,9 +272,9 @@ pub fn generateZedTheme(
         .ignored = fg_disabled,
         .@"ignored.border" = fg_disabled,
         .@"ignored.background" = color_utils.addAlpha(fg_disabled, "26"),
-        .modified = semantic_warning,
-        .@"modified.border" = semantic_warning,
-        .@"modified.background" = semantic_warning_26,
+        .modified = color_utils.lightenColor(semantic_warning, 0.33),
+        .@"modified.border" = color_utils.lightenColor(semantic_warning, 0.33),
+        .@"modified.background" = color_utils.lightenColor(semantic_warning_26, 0.33),
         .predictive = fg_disabled,
         .@"predictive.border" = c2,
         .@"predictive.background" = bg_dark,
@@ -301,7 +301,7 @@ pub fn generateZedTheme(
 
         .@"version_control.added" = semantic_success,
         .@"version_control.deleted" = semantic_error,
-        .@"version_control.modified" = semantic_warning,
+        .@"version_control.modified" = color_utils.lightenColor(semantic_warning, 0.33),
         .@"version_control.renamed" = semantic_info,
         .@"version_control.conflict" = semantic_warning,
         .@"version_control.conflict_marker.ours" = color_utils.addAlpha(semantic_success, "33"),
@@ -507,48 +507,29 @@ fn writeZedThemeJson(writer: anytype, theme: ZedTheme) !void {
 }
 
 fn writeString(writer: anytype, key: []const u8, value: []const u8, indent: []const u8, trailing_comma: bool) !void {
-    try writer.writeAll(indent);
-    try writer.writeAll("\"");
-    try writer.writeAll(key);
-    try writer.writeAll("\": \"");
-    try writer.writeAll(value);
-    try writer.writeAll("\"");
-    if (trailing_comma) try writer.writeAll(",");
-    try writer.writeAll("\n");
+    const comma: []const u8 = if (trailing_comma) "," else "";
+    try writer.print("{s}\"{s}\": \"{s}\"{s}\n", .{ indent, key, value, comma });
 }
 
 fn writeOptionalString(writer: anytype, key: []const u8, value: ?[]const u8, indent: []const u8, trailing_comma: bool) !void {
-    try writer.writeAll(indent);
-    try writer.writeAll("\"");
-    try writer.writeAll(key);
-    try writer.writeAll("\": ");
+    const comma: []const u8 = if (trailing_comma) "," else "";
     if (value) |v| {
-        try writer.writeAll("\"");
-        try writer.writeAll(v);
-        try writer.writeAll("\"");
+        try writer.print("{s}\"{s}\": \"{s}\"{s}\n", .{ indent, key, v, comma });
     } else {
-        try writer.writeAll("null");
+        try writer.print("{s}\"{s}\": null{s}\n", .{ indent, key, comma });
     }
-    if (trailing_comma) try writer.writeAll(",");
-    try writer.writeAll("\n");
 }
 
 fn writeZedThemeStyle(writer: anytype, style: ZedThemeStyle) !void {
     const indent = "                ";
     try writer.writeAll("{\n");
 
-    try writer.writeAll(indent);
-    try writer.writeAll("\"accents\": [\n");
+    try writer.print("{s}\"accents\": [\n", .{indent});
     for (style.accents, 0..) |accent, i| {
-        try writer.writeAll(indent);
-        try writer.writeAll("    \"");
-        try writer.writeAll(accent);
-        try writer.writeAll("\"");
-        if (i < style.accents.len - 1) try writer.writeAll(",");
-        try writer.writeAll("\n");
+        const comma: []const u8 = if (i < style.accents.len - 1) "," else "";
+        try writer.print("{s}    \"{s}\"{s}\n", .{ indent, accent, comma });
     }
-    try writer.writeAll(indent);
-    try writer.writeAll("],\n");
+    try writer.print("{s}],\n", .{indent});
 
     try writeString(writer, "vim.mode.text", style.@"vim.mode.text", indent, true);
     try writeString(writer, "vim.normal.background", style.@"vim.normal.background", indent, true);
@@ -560,14 +541,12 @@ fn writeZedThemeStyle(writer: anytype, style: ZedThemeStyle) !void {
     try writeString(writer, "vim.visual_block.background", style.@"vim.visual_block.background", indent, true);
     try writeString(writer, "vim.replace.background", style.@"vim.replace.background", indent, true);
 
-    try writer.writeAll(indent);
-    try writer.writeAll("\"background.appearance\": \"");
-    try writer.writeAll(switch (style.@"background.appearance") {
+    const appearance_str: []const u8 = switch (style.@"background.appearance") {
         .opaque_appearance => "opaque",
         .blurred => "blurred",
         .transparent => "transparent",
-    });
-    try writer.writeAll("\",\n");
+    };
+    try writer.print("{s}\"background.appearance\": \"{s}\",\n", .{ indent, appearance_str });
 
     try writeString(writer, "border", style.border, indent, true);
     try writeString(writer, "border.variant", style.@"border.variant", indent, true);
@@ -730,21 +709,16 @@ fn writeZedThemeStyle(writer: anytype, style: ZedThemeStyle) !void {
     try writeString(writer, "unreachable.border", style.@"unreachable.border", indent, true);
     try writeString(writer, "unreachable.background", style.@"unreachable.background", indent, true);
 
-    try writer.writeAll(indent);
-    try writer.writeAll("\"players\": [\n");
+    try writer.print("{s}\"players\": [\n", .{indent});
     for (style.players, 0..) |player, i| {
-        try writer.writeAll(indent);
-        try writer.writeAll("    {\n");
+        try writer.print("{s}    {{\n", .{indent});
         try writeString(writer, "cursor", player.cursor, indent ++ "        ", true);
         try writeString(writer, "selection", player.selection, indent ++ "        ", true);
         try writeString(writer, "background", player.background, indent ++ "        ", false);
-        try writer.writeAll(indent);
-        try writer.writeAll("    }");
-        if (i < style.players.len - 1) try writer.writeAll(",");
-        try writer.writeAll("\n");
+        const comma: []const u8 = if (i < style.players.len - 1) "," else "";
+        try writer.print("{s}    }}{s}\n", .{ indent, comma });
     }
-    try writer.writeAll(indent);
-    try writer.writeAll("],\n");
+    try writer.print("{s}],\n", .{indent});
 
     try writeString(writer, "version_control.added", style.@"version_control.added", indent, true);
     try writeString(writer, "version_control.deleted", style.@"version_control.deleted", indent, true);
@@ -772,10 +746,7 @@ fn writeSyntax(writer: anytype, syntax: ZedSyntax) !void {
 
     const fields = @typeInfo(ZedSyntax).@"struct".fields;
     inline for (fields, 0..) |field, i| {
-        try writer.writeAll(indent);
-        try writer.writeAll("\"");
-        try writer.writeAll(field.name);
-        try writer.writeAll("\": ");
+        try writer.print("{s}\"{s}\": ", .{ indent, field.name });
         try writeSyntaxStyle(writer, @field(syntax, field.name));
         if (i < fields.len - 1) try writer.writeAll(",");
         try writer.writeAll("\n");
@@ -785,35 +756,22 @@ fn writeSyntax(writer: anytype, syntax: ZedSyntax) !void {
 }
 
 fn writeSyntaxStyle(writer: anytype, style: SyntaxStyle) !void {
-    try writer.writeAll("{\n");
     const inner_indent = "                        ";
+    try writer.writeAll("{\n");
     try writeString(writer, "color", style.color, inner_indent, true);
 
-    try writer.writeAll(inner_indent);
-    try writer.writeAll("\"font_style\": ");
-    if (style.font_style) |fs| {
-        try writer.writeAll("\"");
-        try writer.writeAll(switch (fs) {
-            .normal => "normal",
-            .italic => "italic",
-            .oblique => "oblique",
-        });
-        try writer.writeAll("\"");
-    } else {
-        try writer.writeAll("null");
-    }
-    try writer.writeAll(",\n");
+    const font_style_str: []const u8 = if (style.font_style) |fs| switch (fs) {
+        .normal => "\"normal\"",
+        .italic => "\"italic\"",
+        .oblique => "\"oblique\"",
+    } else "null";
+    try writer.print("{s}\"font_style\": {s},\n", .{ inner_indent, font_style_str });
 
-    try writer.writeAll(inner_indent);
-    try writer.writeAll("\"font_weight\": ");
     if (style.font_weight) |fw| {
-        var buf: [16]u8 = undefined;
-        const result = std.fmt.bufPrint(&buf, "{d}", .{fw}) catch "0";
-        try writer.writeAll(result);
+        try writer.print("{s}\"font_weight\": {d}\n", .{ inner_indent, fw });
     } else {
-        try writer.writeAll("null");
+        try writer.print("{s}\"font_weight\": null\n", .{inner_indent});
     }
-    try writer.writeAll("\n");
 
     try writer.writeAll("                    }");
 }

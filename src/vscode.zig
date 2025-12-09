@@ -507,8 +507,10 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
 
     var existing_themes = std.ArrayList(ThemeEntry){};
     defer existing_themes.deinit(allocator);
+    try existing_themes.ensureTotalCapacity(allocator, 16);
 
     var strings_to_free = std.ArrayList([]const u8){};
+    try strings_to_free.ensureTotalCapacity(allocator, 48);
     defer {
         for (strings_to_free.items) |s| {
             allocator.free(s);

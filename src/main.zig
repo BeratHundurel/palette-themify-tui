@@ -249,10 +249,13 @@ const PaletteThemify = struct {
                         }
                     }
                 } else if (key.matches(vaxis.Key.enter, .{})) {
+                    const input_text = self.text_input.toOwnedSlice() catch null;
+                    if (input_text == null) return;
+
                     if (self.user_given_path) |old_text| {
                         self.allocator.free(old_text);
                     }
-                    self.user_given_path = try self.text_input.toOwnedSlice();
+                    self.user_given_path = input_text;
 
                     self.processUserPath() catch |err| {
                         if (self.status_message) |old_msg| {
@@ -274,6 +277,10 @@ const PaletteThemify = struct {
                             .{error_msg},
                         ) catch null;
                         self.status_is_error = true;
+                        if (input_text) |text| {
+                            self.text_input.insertSliceAtCursor(text) catch {};
+                        }
+                        return;
                     };
                 } else {
                     try self.text_input.update(.{ .key_press = key });
@@ -700,6 +707,7 @@ const PaletteThemify = struct {
 
         var color_map = std.ArrayList(ColorAndCount){};
         defer color_map.deinit(self.allocator);
+        try color_map.ensureTotalCapacity(self.allocator, 512);
 
         var color_it = img.iterator();
         while (color_it.next()) |color| {
