@@ -1,6 +1,38 @@
 const std = @import("std");
 const types = @import("vscode_types.zig");
 
+const HexBuffer = struct {
+    data: [10]u8 = undefined,
+    len: u8 = 0,
+
+    pub fn slice(self: *const HexBuffer) []const u8 {
+        return self.data[0..self.len];
+    }
+};
+
+var hex_buffer_pool: [512]HexBuffer = undefined;
+var hex_buffer_index: usize = 0;
+
+fn allocHexBuffer() *HexBuffer {
+    const buf = &hex_buffer_pool[hex_buffer_index];
+    hex_buffer_index = (hex_buffer_index + 1) % hex_buffer_pool.len;
+    return buf;
+}
+
+fn formatHex(r: u8, g: u8, b: u8) []const u8 {
+    const buf = allocHexBuffer();
+    const result = std.fmt.bufPrint(&buf.data, "#{X:0>2}{X:0>2}{X:0>2}", .{ r, g, b }) catch return "#000000";
+    buf.len = @intCast(result.len);
+    return result;
+}
+
+fn formatHexWithAlpha(hex: []const u8, alpha: []const u8) []const u8 {
+    const buf = allocHexBuffer();
+    const result = std.fmt.bufPrint(&buf.data, "{s}{s}", .{ hex, alpha }) catch return "#00000000";
+    buf.len = @intCast(result.len);
+    return result;
+}
+
 /// HSL color space representation (normalized 0.0 to 1.0)
 pub const HSL = struct {
     h: f32,
@@ -200,32 +232,24 @@ pub fn getLuminance(hex: []const u8) f32 {
 }
 
 pub fn darkenColor(hex: []const u8, percent: f32) []const u8 {
-    var r = std.fmt.parseInt(u8, hex[1..3], 16) catch 0;
-    var g = std.fmt.parseInt(u8, hex[3..5], 16) catch 0;
-    var b = std.fmt.parseInt(u8, hex[5..7], 16) catch 0;
-
+    const rgb = parseHexToRgb(hex);
     const factor = 1.0 - percent;
-    r = @intFromFloat(@max(@as(f32, @floatFromInt(r)) * factor, 0.0));
-    g = @intFromFloat(@max(@as(f32, @floatFromInt(g)) * factor, 0.0));
-    b = @intFromFloat(@max(@as(f32, @floatFromInt(b)) * factor, 0.0));
-
-    return std.fmt.allocPrint(std.heap.page_allocator, "#{X:0>2}{X:0>2}{X:0>2}", .{ r, g, b }) catch "#000000";
+    const r: u8 = @intFromFloat(@max(@as(f32, @floatFromInt(rgb.r)) * factor, 0.0));
+    const g: u8 = @intFromFloat(@max(@as(f32, @floatFromInt(rgb.g)) * factor, 0.0));
+    const b: u8 = @intFromFloat(@max(@as(f32, @floatFromInt(rgb.b)) * factor, 0.0));
+    return formatHex(r, g, b);
 }
 
 pub fn lightenColor(hex: []const u8, percent: f32) []const u8 {
-    var r = std.fmt.parseInt(u8, hex[1..3], 16) catch 0;
-    var g = std.fmt.parseInt(u8, hex[3..5], 16) catch 0;
-    var b = std.fmt.parseInt(u8, hex[5..7], 16) catch 0;
-
-    r = @intFromFloat(@min(@as(f32, @floatFromInt(r)) + (255.0 - @as(f32, @floatFromInt(r))) * percent, 255.0));
-    g = @intFromFloat(@min(@as(f32, @floatFromInt(g)) + (255.0 - @as(f32, @floatFromInt(g))) * percent, 255.0));
-    b = @intFromFloat(@min(@as(f32, @floatFromInt(b)) + (255.0 - @as(f32, @floatFromInt(b))) * percent, 255.0));
-
-    return std.fmt.allocPrint(std.heap.page_allocator, "#{X:0>2}{X:0>2}{X:0>2}", .{ r, g, b }) catch "#FFFFFF";
+    const rgb = parseHexToRgb(hex);
+    const r: u8 = @intFromFloat(@min(@as(f32, @floatFromInt(rgb.r)) + (255.0 - @as(f32, @floatFromInt(rgb.r))) * percent, 255.0));
+    const g: u8 = @intFromFloat(@min(@as(f32, @floatFromInt(rgb.g)) + (255.0 - @as(f32, @floatFromInt(rgb.g))) * percent, 255.0));
+    const b: u8 = @intFromFloat(@min(@as(f32, @floatFromInt(rgb.b)) + (255.0 - @as(f32, @floatFromInt(rgb.b))) * percent, 255.0));
+    return formatHex(r, g, b);
 }
 
 pub fn addAlpha(hex: []const u8, alpha: []const u8) []const u8 {
-    return std.fmt.allocPrint(std.heap.page_allocator, "{s}{s}", .{ hex, alpha }) catch "#00000000";
+    return formatHexWithAlpha(hex, alpha);
 }
 
 pub fn contrastRatio(hex1: []const u8, hex2: []const u8) f32 {
@@ -376,7 +400,7 @@ pub fn hslToRgb(h: f32, s: f32, l: f32) RGB {
 }
 
 pub fn rgbToHex(r: u8, g: u8, b: u8) []const u8 {
-    return std.fmt.allocPrint(std.heap.page_allocator, "#{X:0>2}{X:0>2}{X:0>2}", .{ r, g, b }) catch "#000000";
+    return formatHex(r, g, b);
 }
 
 pub fn rgbToHexAlloc(allocator: std.mem.Allocator, r: u8, g: u8, b: u8) ![]const u8 {
@@ -396,20 +420,53 @@ pub fn colorf32ToHex(allocator: std.mem.Allocator, r: f32, g: f32, b: f32) ![]co
     return try rgbToHexAlloc(allocator, rgb.r, rgb.g, rgb.b);
 }
 
+fn deltaE94FromLab(lab1: LAB, lab2: LAB) f32 {
+    const dl = lab1.l - lab2.l;
+    const da = lab1.a - lab2.a;
+    const db = lab1.b - lab2.b;
+
+    const c1 = @sqrt(lab1.a * lab1.a + lab1.b * lab1.b);
+    const c2 = @sqrt(lab2.a * lab2.a + lab2.b * lab2.b);
+    const dc = c1 - c2;
+
+    const dh_sq = da * da + db * db - dc * dc;
+    const dh = if (dh_sq > 0) @sqrt(dh_sq) else 0.0;
+
+    const sc = 1.0 + 0.045 * c1;
+    const sh = 1.0 + 0.015 * c1;
+
+    const dl_term = dl;
+    const dc_term = dc / sc;
+    const dh_term = dh / sh;
+
+    return @sqrt(dl_term * dl_term + dc_term * dc_term + dh_term * dh_term);
+}
+
 /// Selects `count` maximally diverse colors using a greedy farthest-point sampling algorithm.
 /// Starts with the color most distant from all others, then iteratively picks the color
 /// with maximum minimum distance to already-selected colors.
+/// Pre-computes LAB values to avoid repeated hex parsing.
 pub fn selectDiverseColors(allocator: std.mem.Allocator, colors: []const []const u8, count: usize) ![][]const u8 {
-    var selected = std.ArrayList([]const u8){};
-    defer selected.deinit(allocator);
+    const n = colors.len;
+    if (n == 0) return try allocator.alloc([]const u8, 0);
+
+    const lab_values = try allocator.alloc(LAB, n);
+    defer allocator.free(lab_values);
+    for (colors, 0..) |color, i| {
+        lab_values[i] = rgbToLab(parseHexToRgb(color));
+    }
+
+    const selected_indices = try allocator.alloc(usize, @min(count, n));
+    defer allocator.free(selected_indices);
+    var selected_count: usize = 0;
 
     var best_start_idx: usize = 0;
     var best_start_score: f32 = 0.0;
-    for (colors, 0..) |color, i| {
+    for (0..n) |i| {
         var total_dist: f32 = 0.0;
-        for (colors) |other| {
-            if (!std.mem.eql(u8, color, other)) {
-                total_dist += perceptualDistance(color, other);
+        for (0..n) |j| {
+            if (i != j) {
+                total_dist += deltaE94FromLab(lab_values[i], lab_values[j]);
             }
         }
         if (total_dist > best_start_score) {
@@ -417,19 +474,17 @@ pub fn selectDiverseColors(allocator: std.mem.Allocator, colors: []const []const
             best_start_idx = i;
         }
     }
-    try selected.append(allocator, colors[best_start_idx]);
+    selected_indices[selected_count] = best_start_idx;
+    selected_count += 1;
 
-    var safety_counter: usize = 0;
-    const max_iterations = 256;
-
-    while (selected.items.len < count and safety_counter < max_iterations) : (safety_counter += 1) {
+    while (selected_count < count and selected_count < n) {
         var max_min_distance: f32 = 0.0;
-        var best_candidate: ?[]const u8 = null;
+        var best_candidate_idx: ?usize = null;
 
-        for (colors) |candidate| {
+        for (0..n) |candidate_idx| {
             var already_selected = false;
-            for (selected.items) |s| {
-                if (std.mem.eql(u8, s, candidate)) {
+            for (selected_indices[0..selected_count]) |sel_idx| {
+                if (candidate_idx == sel_idx) {
                     already_selected = true;
                     break;
                 }
@@ -437,8 +492,8 @@ pub fn selectDiverseColors(allocator: std.mem.Allocator, colors: []const []const
             if (already_selected) continue;
 
             var min_distance: f32 = std.math.floatMax(f32);
-            for (selected.items) |s| {
-                const dist = perceptualDistance(candidate, s);
+            for (selected_indices[0..selected_count]) |sel_idx| {
+                const dist = deltaE94FromLab(lab_values[candidate_idx], lab_values[sel_idx]);
                 if (dist < min_distance) {
                     min_distance = dist;
                 }
@@ -446,18 +501,24 @@ pub fn selectDiverseColors(allocator: std.mem.Allocator, colors: []const []const
 
             if (min_distance > max_min_distance) {
                 max_min_distance = min_distance;
-                best_candidate = candidate;
+                best_candidate_idx = candidate_idx;
             }
         }
 
-        if (best_candidate) |candidate| {
-            try selected.append(allocator, candidate);
+        if (best_candidate_idx) |idx| {
+            selected_indices[selected_count] = idx;
+            selected_count += 1;
         } else {
             break;
         }
     }
 
-    return try allocator.dupe([]const u8, selected.items);
+    const result = try allocator.alloc([]const u8, selected_count);
+    for (selected_indices[0..selected_count], 0..) |idx, i| {
+        result[i] = colors[idx];
+    }
+
+    return result;
 }
 
 /// Generates a color based on color wheel harmony theory (complementary, triadic, etc.).

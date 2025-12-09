@@ -22,7 +22,7 @@ pub const Appearance = enum {
 };
 
 pub const BackgroundAppearance = enum {
-    opaque_appearance,
+    @"opaque",
     blurred,
     transparent,
 };

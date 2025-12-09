@@ -486,14 +486,17 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
     defer theme_file.close();
 
     const fmt = std.json.fmt(theme, .{ .whitespace = .indent_4, .emit_null_optional_fields = false });
-    var json_writer = std.io.Writer.Allocating.init(allocator);
+    var json_writer = std.Io.Writer.Allocating.init(allocator);
     defer json_writer.deinit();
 
     try fmt.format(&json_writer.writer);
     const json_string = try json_writer.toOwnedSlice();
     defer allocator.free(json_string);
 
-    try theme_file.writeAll(json_string);
+    var write_buffer: [4096]u8 = undefined;
+    var buffered_writer = theme_file.writer(&write_buffer);
+    try buffered_writer.interface.writeAll(json_string);
+    try buffered_writer.interface.flush();
 
     const package_json_path = try std.fs.path.join(allocator, &[_][]const u8{
         extension_dir_path,
@@ -585,14 +588,17 @@ pub fn installThemeToVSCode(allocator: std.mem.Allocator, theme: VSCodeTheme, th
     defer package_file.close();
 
     const pkg_fmt = std.json.fmt(package_data, .{ .whitespace = .indent_2 });
-    var pkg_json_writer = std.io.Writer.Allocating.init(allocator);
+    var pkg_json_writer = std.Io.Writer.Allocating.init(allocator);
     defer pkg_json_writer.deinit();
 
     try pkg_fmt.format(&pkg_json_writer.writer);
     const pkg_json_string = try pkg_json_writer.toOwnedSlice();
     defer allocator.free(pkg_json_string);
 
-    try package_file.writeAll(pkg_json_string);
+    var pkg_write_buffer: [4096]u8 = undefined;
+    var pkg_buffered_writer = package_file.writer(&pkg_write_buffer);
+    try pkg_buffered_writer.interface.writeAll(pkg_json_string);
+    try pkg_buffered_writer.interface.flush();
 
     return try allocator.dupe(u8, extension_dir_path);
 }
