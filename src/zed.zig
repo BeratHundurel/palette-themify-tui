@@ -46,15 +46,25 @@ pub fn generateZedTheme(
     const base_luminance = color_utils.getLuminance(c0);
     const darken_amount = if (dark_base) 0.75 + (base_luminance) * 0.20 else 0.0;
     const lighten_amount = if (dark_base) 0.0 else 0.75 + (1.0 - base_luminance) * 0.20;
+
     const background = if (dark_base) color_utils.darkenColor(c0, darken_amount) else color_utils.lightenColor(c0, lighten_amount);
-
-    const proposed_foreground = improved_colors[selection.foreground_index];
-    const foreground = color_utils.ensureReadableContrast(proposed_foreground, background, 7.0);
-
     const bg_very_dark = if (dark_base) color_utils.darkenColor(background, 0.20) else color_utils.lightenColor(background, 0.20);
     const bg_dark = if (dark_base) color_utils.darkenColor(background, 0.15) else color_utils.lightenColor(background, 0.15);
     const bg_light = if (dark_base) color_utils.lightenColor(background, 0.05) else color_utils.darkenColor(background, 0.05);
     const bg_lighter = if (dark_base) color_utils.lightenColor(background, 0.10) else color_utils.darkenColor(background, 0.10);
+
+    const proposed_foreground = improved_colors[selection.foreground_index];
+    const foreground = color_utils.ensureReadableContrast(proposed_foreground, background, 7.0);
+
+    const fg_muted = if (dark_base) color_utils.darkenColor(foreground, 0.50) else color_utils.lightenColor(foreground, 0.50);
+    const fg_disabled = if (dark_base) color_utils.darkenColor(foreground, 0.60) else color_utils.lightenColor(foreground, 0.60);
+    const fg_placeholder = if (dark_base) color_utils.darkenColor(foreground, 0.70) else color_utils.lightenColor(foreground, 0.70);
+
+    const fg_12 = color_utils.addAlpha(foreground, "12");
+    const fg_26 = color_utils.addAlpha(foreground, "26");
+    const fg_40 = color_utils.addAlpha(foreground, "40");
+    const fg_66 = color_utils.addAlpha(foreground, "66");
+    const fg_80 = color_utils.addAlpha(foreground, "80");
 
     const c1 = color_utils.adjustForContrast(c1_raw, bg_very_dark, 3.5);
     const c2 = color_utils.adjustForContrast(c2_raw, bg_very_dark, 3.5);
@@ -74,16 +84,6 @@ pub fn generateZedTheme(
     const semantic_success = color_utils.adjustForContrast(semantic.success_color, background, 3.5);
     const semantic_info = color_utils.adjustForContrast(semantic.info_color, background, 3.5);
 
-    const fg_muted = if (dark_base) color_utils.darkenColor(foreground, 0.50) else color_utils.lightenColor(foreground, 0.50);
-    const fg_disabled = if (dark_base) color_utils.darkenColor(foreground, 0.60) else color_utils.lightenColor(foreground, 0.60);
-    const fg_placeholder = if (dark_base) color_utils.darkenColor(foreground, 0.70) else color_utils.lightenColor(foreground, 0.70);
-
-    const fg_12 = color_utils.addAlpha(foreground, "12");
-    const fg_26 = color_utils.addAlpha(foreground, "26");
-    const fg_40 = color_utils.addAlpha(foreground, "40");
-    const fg_66 = color_utils.addAlpha(foreground, "66");
-    const fg_80 = color_utils.addAlpha(foreground, "80");
-
     const c2_33 = color_utils.addAlpha(c2, "33");
     const c2_40 = color_utils.addAlpha(c2, "40");
     const c2_66 = color_utils.addAlpha(c2, "66");
@@ -102,14 +102,15 @@ pub fn generateZedTheme(
 
     const accent_bright = if (dark_base) color_utils.lightenColor(c2, 0.33) else color_utils.darkenColor(c2, 0.33);
 
-    const accents = try allocator.alloc([]const u8, 7);
-    accents[0] = c2_66;
-    accents[1] = color_utils.addAlpha(c3, "66");
-    accents[2] = color_utils.addAlpha(c4, "66");
-    accents[3] = color_utils.addAlpha(c5, "66");
-    accents[4] = color_utils.addAlpha(c6, "66");
-    accents[5] = color_utils.addAlpha(c7, "66");
-    accents[6] = color_utils.addAlpha(c8, "66");
+    const accents = try allocator.alloc([]const u8, 8);
+    accents[7] = c1;
+    accents[0] = c2;
+    accents[1] = c3;
+    accents[2] = c4;
+    accents[3] = c5;
+    accents[4] = c6;
+    accents[5] = c7;
+    accents[6] = c8;
 
     const players = try allocator.alloc(Player, 8);
     players[0] = .{ .cursor = foreground, .selection = fg_40, .background = foreground };
@@ -193,7 +194,7 @@ pub fn generateZedTheme(
         .@"pane.focused_border" = foreground,
         .@"pane_group.border" = bg_lighter,
 
-        .@"scrollbar.thumb.background" = fg_placeholder,
+        .@"scrollbar.thumb.background" = color_utils.addAlpha(fg_placeholder, "80"),
         .@"scrollbar.thumb.hover_background" = fg_muted,
         .@"scrollbar.thumb.active_background" = null,
         .@"scrollbar.thumb.border" = null,
