@@ -31,7 +31,7 @@ npx themify
 Requires [Zig](https://ziglang.org/download/) version 0.15.2 or later.
 
 ```bash
-git clone https://github.com/BeratHundurel/palette-themify
+git clone https://github.com/BeratHundurel/palette-themify-tui
 cd palette-themify
 zig build -Doptimize=ReleaseFast
 ```

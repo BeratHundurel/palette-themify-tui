@@ -1,6 +1,6 @@
 {
   "name": "palette-themify-tui",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "type": "module",
   "description": "A TUI application for extracting common colors from an image and generating vscode/zed themes",
   "author": "Berat Hundurel",
