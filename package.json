@@ -1,0 +1,43 @@
+{
+  "name": "palette-themify-tui",
+  "version": "0.1.1",
+  "type": "module",
+  "description": "A TUI application for extracting common colors from an image and generating vscode/zed themes",
+  "author": "Berat Hundurel",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/BeratHundurel/palette-themify-tui"
+  },
+  "keywords": [
+    "theme",
+    "color",
+    "palette",
+    "tui",
+    "terminal",
+    "cli"
+  ],
+  "bin": {
+    "themify": "bin/themify.js"
+  },
+  "files": [
+    "bin",
+    "binaries"
+  ],
+  "scripts": {
+    "postinstall": "node bin/postinstall.js",
+    "build:all": "node scripts/build-all.js"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

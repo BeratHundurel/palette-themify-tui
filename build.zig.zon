@@ -35,9 +35,9 @@
         .vaxis = .{
             // Temporarily using local path for testing fix
             // Original:
-            // .url = "git+https://github.com/rockorager/libvaxis.git#fa6f3247ee82741d20e5193e532b3fb07a3082bb",
-            // .hash = "vaxis-0.5.1-BWNV_IcuCQAVtAOYOyWPed_XZnRR5jv3JkkBUvlAFpSK",
-            .path = "../libvaxis",
+            //.url = "git+https://github.com/rockorager/libvaxis.git#fa6f3247ee82741d20e5193e532b3fb07a3082bb",
+            //.hash = "vaxis-0.5.1-BWNV_IcuCQAVtAOYOyWPed_XZnRR5jv3JkkBUvlAFpSK",
+             .path = "../libvaxis",
         },
         .zigimg = .{
             .url = "git+https://github.com/zigimg/zigimg.git#f5783e87627cbd9e0b45fad112e9f73503914f36",

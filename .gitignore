@@ -6,3 +6,8 @@ Session*.*vim
 commit_msg
 *.sw?
 /docs
+
+# npm/bun
+node_modules/
+binaries/
+*.tgz

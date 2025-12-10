@@ -674,8 +674,7 @@ const PaletteThemify = struct {
         }
     }
 
-    /// Load an image from user_given_path, extract colors by grouping similar pixels,
-    /// and store the top 15 most frequent colors sorted by occurrence count.
+    /// Load an image from user_given_path, extract colors by grouping similar pixels
     pub fn processUserPath(self: *PaletteThemify) !void {
         const path = self.user_given_path orelse return;
 
@@ -833,14 +832,7 @@ const PaletteThemify = struct {
 };
 
 pub fn main() !void {
-    var gpa: std.heap.DebugAllocator(.{}) = .init;
-    defer {
-        const deinit_status = gpa.deinit();
-        if (deinit_status == .leak) {
-            std.log.err("memory leak", .{});
-        }
-    }
-    const allocator = gpa.allocator();
+    const allocator = std.heap.smp_allocator;
 
     var app = try PaletteThemify.init(allocator);
     defer app.deinit();
